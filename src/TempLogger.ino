@@ -1,7 +1,7 @@
 /*
  * Project TempLogger
- * Description:
- * Author:
+ * Description: Reading Temperature from OneWire 18B20 and sending it to particle cloud. 
+ * Author: Abdul Hannan Mustajab
  * Date:
  */
 
@@ -10,22 +10,29 @@
 
 // Initialize sensor object.
 DS18 sensor(D4);
+char data[100];
 
 
 
-// setup() runs once, when the device is first turned on.
 void setup() {
-  // Put initialization like pinMode and begin functions here.
+
+pinMode(D3,OUTPUT);
+
+// Setup Particle Variable
+
+Particle.variable("temperature",String(sensor.celsius()));
 
 }
 
-// loop() runs over and over again, as quickly as it can execute.
 void loop() {
-  // The core of your code will likely live here.
-   
+// Reading data from the sensor.    
    if (sensor.read()) {
+     //Sending the temperature in Celsius
     Particle.publish("temperature", String(sensor.celsius()), PRIVATE);
+    //Sending the temperature in  fahrenheit.
     Particle.publish("farenhiet",String(sensor.fahrenheit()),PRIVATE);
+
+    delay(5000);
   }
 
 }
