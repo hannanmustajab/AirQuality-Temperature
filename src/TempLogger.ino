@@ -8,23 +8,20 @@
 
 #include "DS18.h"
 
-// Initialize sensor object.
+// Initialize sensor object
 DS18 sensor(D8);
 
 // You could define a smaller array here for your Temperature variable
 char temperatureString[16];
-char temp[16];
 
 
 
 
 void setup() {
 
-pinMode(D3,OUTPUT);
+  pinMode(D3,OUTPUT);   // Why are you defining this pin - don't see it being used
 
-// Setup Particle Variable
-
-Particle.variable("celsius",temperatureString);
+  Particle.variable("celsius",temperatureString);// Setup Particle Variable
 
 }
 
@@ -32,22 +29,29 @@ void loop() {
 // Reading data from the sensor.    
    if (sensor.read()) {
 
-    // What if you constructed a more descriptive string for your Particle.variable here
-    // Use snprintf and the temperatureString to construct a variable like: "50 degrees C"
-    // Created temperature String using snprintf. 
-      snprintf(temperatureString , 16, "%0.2lf Degrees C",sensor.celsius());
-    
-
+      //snprintf(temperatureString , 16, "%0.2lf Degrees C",sensor.celsius());
+      snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", sensor.celsius());  // Ensures you get the size right and prevent memory overflow
+   }
     /*  
     You should avoid delays that block program execution.  
     Consider another approach taking advantage of Particle's waitUntil() function
     Particle services process requests each time it completes the main loop - your program should not block 
     the program flow through the main loop.  This gets more important as the code size grows.
      */
-    waitFor(sensor.read,5000);
-    Particle.publish("farenhiet",String(sensor.fahrenheit()),PRIVATE);
-      
+    waitFor(sensor.read,5000);  // This will not rate limit as sensor.read will test true much faster than 1/sec. In fact, you are here in the code because it is true
+    Particle.publish("farenhiet",String(sensor.fahrenheit()),PRIVATE);  
 
   }
 
 }
+
+// Hint, what if there were a function that would return "true" only if 1 second had passed since last publish
+/*  Key elements would be: 
+    Certaintly in execution - use waitUntil() not waitFor()
+    a constant defined at the top of the sketch setting the update rate
+    a constant defined at the top that would hold the timestamp of the last publish
+    a function that would check to see if millis() was more than that timestamp plus that rate
+    call that function in the waitUntil statement.
+
+    Take a stab at this and then I will help if you are still stuck.  Again, this is something you will use a lot
+*/
