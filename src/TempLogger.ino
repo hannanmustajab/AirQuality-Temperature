@@ -46,8 +46,7 @@ void loop() {
     // Use snprintf and the temperatureString to construct a variable like: "50 degrees C"
     
 
-    delay(5000);  // This is a blocking delay
-    /* 
+    /*  
     You should avoid delays that block program execution.  
     Consider another approach taking advantage of Particle's waitUntil() function
     Particle services process requests each time it completes the main loop - your program should not block 
