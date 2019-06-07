@@ -1,5 +1,5 @@
 #include "application.h"
-#line 1 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
+#line 1 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
 /*
  * Project TempLogger
  * Description: Reading Temperature from OneWire 18B20 and sending it to particle cloud. 
@@ -7,15 +7,19 @@
  * Date:
  */
 
+// v1.00 - Got the metering working, tested with sensor - viable code
+
+// Version Number.
+void setup();
+void loop();
+bool PublishDelayFunction();
+#line 11 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
+#define VERSION "1.00"      
 
 #include "DS18.h"
 
 // Initialize sensor object
-void setup();
-void loop();
-bool PublishDelayFunction();
-#line 12 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
-DS18 sensor(D4);
+DS18 sensor(D7);
 
 // You could define a smaller array here for your Temperature variable
 char temperatureString[16];
@@ -25,7 +29,7 @@ unsigned long updateRate = 5000; // Define Update Rate
 
 void setup() {
   Particle.variable("celsius",temperatureString);// Setup Particle Variable
-  // Serial.begin();   // you don't need this line with Particle even if you are using Serial.print()
+  Particle.variable("version",VERSION); // Particle Variable for Version
 }
 
 

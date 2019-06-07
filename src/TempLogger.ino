@@ -7,11 +7,13 @@
 
 // v1.00 - Got the metering working, tested with sensor - viable code
 
+// Version Number.
+#define VERSION "1.00"      
 
 #include "DS18.h"
 
 // Initialize sensor object
-DS18 sensor(D4);
+DS18 sensor(D7);
 
 // You could define a smaller array here for your Temperature variable
 char temperatureString[16];
@@ -21,7 +23,7 @@ unsigned long updateRate = 5000; // Define Update Rate
 
 void setup() {
   Particle.variable("celsius",temperatureString);// Setup Particle Variable
-  // Serial.begin();   // you don't need this line with Particle even if you are using Serial.print()
+  Particle.variable("version",VERSION); // Particle Variable for Version
 }
 
 
