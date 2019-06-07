@@ -6,9 +6,13 @@
  */
 
 // v1.00 - Got the metering working, tested with sensor - viable code
+// v1.01 - Added release level to variables
 
 // Version Number.
-#define VERSION "1.00"      
+// #define VERSION "1.00"      - Don't use common names in #define
+// #define SOFTWARERELEASENUMBER "1.00"               // Keep track of release numbers
+const char releaseNumber[6] = "1.01";               // Displays the release on the menu ****  this is not a production release ****
+
 
 #include "DS18.h"
 
@@ -23,7 +27,8 @@ unsigned long updateRate = 5000; // Define Update Rate
 
 void setup() {
   Particle.variable("celsius",temperatureString);// Setup Particle Variable
-  Particle.variable("version",VERSION); // Particle Variable for Version
+  // Particle.variable("version",VERSION); // Particle Variable for Version
+  Particle.variable("Release",releaseNumber);
 }
 
 

@@ -1,5 +1,5 @@
 #include "application.h"
-#line 1 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
+#line 1 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
 /*
  * Project TempLogger
  * Description: Reading Temperature from OneWire 18B20 and sending it to particle cloud. 
@@ -10,11 +10,14 @@
 // v1.00 - Got the metering working, tested with sensor - viable code
 
 // Version Number.
+// #define VERSION "1.00"      - Don't use common names in #define
+// #define SOFTWARERELEASENUMBER "1.00"               // Keep track of release numbers
 void setup();
 void loop();
 bool PublishDelayFunction();
-#line 11 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
-#define VERSION "1.00"      
+#line 13 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
+const char releaseNumber[6] = "1.00";               // Displays the release on the menu ****  this is not a production release ****
+
 
 #include "DS18.h"
 
@@ -29,7 +32,8 @@ unsigned long updateRate = 5000; // Define Update Rate
 
 void setup() {
   Particle.variable("celsius",temperatureString);// Setup Particle Variable
-  Particle.variable("version",VERSION); // Particle Variable for Version
+  // Particle.variable("version",VERSION); // Particle Variable for Version
+  Particle.variable("Release",releaseNumber);
 }
 
 
