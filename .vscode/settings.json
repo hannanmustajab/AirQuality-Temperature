@@ -5,7 +5,7 @@
         "*.ino": "cpp"
     },
     "particle.firmwareVersion": "1.1.0",
-    "particle.targetPlatform": "photon",
+    "particle.targetPlatform": "argon",
     "cortex-debug.openocdPath": "/Users/chipmc/.particle/toolchains/openocd/0.10.0-particle.1/bin/openocd",
-    "particle.targetDevice": "FallsTest"
+    "particle.targetDevice": "Argon-Dev"
 }

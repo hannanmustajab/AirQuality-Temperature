@@ -8,6 +8,8 @@
  */
 
 // v1.00 - Got the metering working, tested with sensor - viable code
+// v1.01 - Added release level to variables
+// v1.02 - Moved pin to D6 and started to add finite state machine structure
 
 // Version Number.
 // #define VERSION "1.00"      - Don't use common names in #define
@@ -15,14 +17,20 @@
 void setup();
 void loop();
 bool PublishDelayFunction();
-#line 13 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
-const char releaseNumber[6] = "1.00";               // Displays the release on the menu ****  this is not a production release ****
+#line 15 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
+const char releaseNumber[6] = "1.02";               // Displays the release on the menu ****  this is not a production release ****
 
 
 #include "DS18.h"
 
 // Initialize sensor object
-DS18 sensor(D7);
+DS18 sensor(D6);
+
+// State Machine Variables
+enum State { INITIALIZATION_STATE, IDLE_STATE, MEASURING_STATE, REPORTING_STATE };
+State state = INITIALIZATION_STATE;
+
+
 
 // You could define a smaller array here for your Temperature variable
 char temperatureString[16];
@@ -34,6 +42,8 @@ void setup() {
   Particle.variable("celsius",temperatureString);// Setup Particle Variable
   // Particle.variable("version",VERSION); // Particle Variable for Version
   Particle.variable("Release",releaseNumber);
+
+  state= IDLE_STATE;
 }
 
 
@@ -56,5 +66,14 @@ bool PublishDelayFunction()
     tstamp = millis();
     return 1;
   }
+
+  /* Restructure the main loop to put this code into states
+  Use a Switch case statement to control program flow based on the state
+  Idle state is where the device waits for the 5 second to pass between samples
+  Measuring state where you update the temperatureString
+  Reporting state where you publish the results
+  Then back to the idle state for the next samples
+  Give it a shot and let me know if you get stuck.  Your main loop should only be the Switch case statement on "state"
+  */
 }
 
