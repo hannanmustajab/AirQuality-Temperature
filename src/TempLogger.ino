@@ -8,34 +8,37 @@
 // v1.00 - Got the metering working, tested with sensor - viable code
 // v1.01 - Added release level to variables
 // v1.02 - Moved pin to D6 and started to add finite state machine structure
+// v1.03 - Added measurements for WiFi signal
 
 // Version Number.
 // #define VERSION "1.00"      - Don't use common names in #define
 // #define SOFTWARERELEASENUMBER "1.00"               // Keep track of release numbers
-const char releaseNumber[6] = "1.02";               // Displays the release on the menu ****  this is not a production release ****
+const char releaseNumber[6] = "1.03";               // Displays the release on the menu ****  this is not a production release ****
 
 
 #include "DS18.h"
 
-// Initialize sensor object
-DS18 sensor(D6);
+// Initialize modules here
+DS18 sensor(D3);                       // Initialize sensor object
 
 // State Machine Variables
 enum State { INITIALIZATION_STATE, IDLE_STATE, MEASURING_STATE, REPORTING_STATE };
 State state = INITIALIZATION_STATE;
 
 
-
-// You could define a smaller array here for your Temperature variable
-char temperatureString[16];
+// Variables Related To Particle Mobile Application Reporting
+char signalString[16];                     // Used to communicate Wireless RSSI and Description
+char temperatureString[16];                                         // Temperature string for Reporting
+char batteryString[16];                                             // Battery value for reporting
 
 unsigned long updateRate = 5000; // Define Update Rate
 
 
 void setup() {
   Particle.variable("celsius",temperatureString);// Setup Particle Variable
-  // Particle.variable("version",VERSION); // Particle Variable for Version
   Particle.variable("Release",releaseNumber);
+  Particle.variable("Signal", signalString);                      // Particle variables that enable monitoring using the mobile app
+  Particle.variable("Battery", batteryString);
 
   state= IDLE_STATE;
 }
@@ -46,6 +49,8 @@ void loop() {
    if (sensor.read()) {
       snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", sensor.celsius());  // Ensures you get the size right and prevent memory overflow2
    }
+   getSignalStrength();
+   getBatteryCharge();
    waitUntil(PublishDelayFunction);
    Particle.publish("Temperature",temperatureString,PRIVATE);  
   }
@@ -71,3 +76,18 @@ bool PublishDelayFunction()
   */
 }
 
+void getSignalStrength()
+{
+  WiFiSignal sig = WiFi.RSSI();
+ 
+  float rssi = sig.getStrength();
+
+  snprintf(signalString,sizeof(signalString), "%.0f%%", rssi);
+}
+
+void getBatteryCharge() 
+{
+  float voltage = analogRead(BATT) * 0.0011224;
+  
+  snprintf(batteryString, sizeof(batteryString), "%3.1f V", voltage);
+}
