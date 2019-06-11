@@ -1,5 +1,5 @@
 #include "application.h"
-#line 1 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
+#line 1 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
 /*
  * Project TempLogger
  * Description: Reading Temperature from OneWire 18B20 and sending it to particle cloud. 
@@ -20,55 +20,82 @@ void loop();
 bool PublishDelayFunction();
 void getSignalStrength();
 void getBatteryCharge();
-#line 16 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
-const char releaseNumber[6] = "1.03";               // Displays the release on the menu ****  this is not a production release ****
-
+#line 16 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
+const char releaseNumber[6] = "1.03"; // Displays the release on the menu ****  this is not a production release ****
 
 #include "DS18.h"
 
 // Initialize modules here
-DS18 sensor(D3);                       // Initialize sensor object
+DS18 sensor(D3); // Initialize sensor object
 
 // State Machine Variables
-enum State { INITIALIZATION_STATE, IDLE_STATE, MEASURING_STATE, REPORTING_STATE };
+enum State
+{
+  INITIALIZATION_STATE,
+  IDLE_STATE,
+  MEASURING_STATE,
+  REPORTING_STATE
+};
 State state = INITIALIZATION_STATE;
 
-
 // Variables Related To Particle Mobile Application Reporting
-char signalString[16];                     // Used to communicate Wireless RSSI and Description
-char temperatureString[16];                                         // Temperature string for Reporting
-char batteryString[16];                                             // Battery value for reporting
+char signalString[16];      // Used to communicate Wireless RSSI and Description
+char temperatureString[16]; // Temperature string for Reporting
+char batteryString[16];     // Battery value for reporting
 
 unsigned long updateRate = 5000; // Define Update Rate
 
-
-void setup() {
-  Particle.variable("celsius",temperatureString);// Setup Particle Variable
-  Particle.variable("Release",releaseNumber);
-  Particle.variable("Signal", signalString);                      // Particle variables that enable monitoring using the mobile app
+void setup()
+{
+  Particle.variable("celsius", temperatureString); // Setup Particle Variable
+  Particle.variable("Release", releaseNumber);
+  Particle.variable("Signal", signalString); // Particle variables that enable monitoring using the mobile app
   Particle.variable("Battery", batteryString);
 
-  state= IDLE_STATE;
+  state = IDLE_STATE;
 }
 
+void loop()
+{
 
-void loop() {
-// Reading data from the sensor.    
-   if (sensor.read()) {
-      snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", sensor.celsius());  // Ensures you get the size right and prevent memory overflow2
-   }
-   getSignalStrength();
-   getBatteryCharge();
-   waitUntil(PublishDelayFunction);
-   Particle.publish("Temperature",temperatureString,PRIVATE);  
+  getSignalStrength();
+  getBatteryCharge();
+
+  switch (state)
+  {
+  case IDLE_STATE:
+    static unsigned long lastPublish = 0;
+    if(millis() - lastPublish <= 5000){
+      lastPublish = millis();
+      state = MEASURING_STATE;
+    } 
+    break;
+
+  case MEASURING_STATE:
+    // Reading data from the sensor.
+    if (sensor.read())
+    {
+      snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", sensor.celsius()); // Ensures you get the size right and prevent memory overflow2
+    }
+    else
+      state = REPORTING_STATE;
+    break;
+
+  case REPORTING_STATE:
+    waitUntil(PublishDelayFunction);
+    Particle.publish("Temperature", temperatureString, PRIVATE);
+    state = IDLE_STATE;
+    break;
   }
+}
 
-// Function to create a delay in the publish time 
+// Function to create a delay in the publish time
 bool PublishDelayFunction()
 {
-  static unsigned long tstamp = 0;                      // Static variables are defined once and retain their value
-  if (millis() - tstamp  <= updateRate) return 0;
-  else 
+  static unsigned long tstamp = 0; // Static variables are defined once and retain their value
+  if (millis() - tstamp <= updateRate)
+    return 0;
+  else
   {
     tstamp = millis();
     return 1;
@@ -87,15 +114,15 @@ bool PublishDelayFunction()
 void getSignalStrength()
 {
   WiFiSignal sig = WiFi.RSSI();
- 
+
   float rssi = sig.getStrength();
 
-  snprintf(signalString,sizeof(signalString), "%.0f%%", rssi);
+  snprintf(signalString, sizeof(signalString), "%.0f%%", rssi);
 }
 
-void getBatteryCharge() 
+void getBatteryCharge()
 {
   float voltage = analogRead(BATT) * 0.0011224;
-  
+
   snprintf(batteryString, sizeof(batteryString), "%3.1f V", voltage);
 }
