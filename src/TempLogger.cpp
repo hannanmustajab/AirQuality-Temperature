@@ -20,6 +20,8 @@ void loop();
 bool PublishDelayFunction();
 void getSignalStrength();
 void getBatteryCharge();
+void getMeasurements();
+int verboseMode(String toggleSensor);
 #line 16 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
 const char releaseNumber[6] = "1.03"; // Displays the release on the menu ****  this is not a production release ****
 
@@ -58,27 +60,17 @@ void setup()
 void loop()
 {
 
-  getSignalStrength();
-  getBatteryCharge();
-
   switch (state)
   {
   case IDLE_STATE:
-    static unsigned long lastPublish = 0;
-    if(millis() - lastPublish <= 5000){
-      lastPublish = millis();
-      state = MEASURING_STATE;
-    } 
+   System.sleep(D3,CHANGE);
     break;
 
   case MEASURING_STATE:
-    // Reading data from the sensor.
-    if (sensor.read())
-    {
-      snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", sensor.celsius()); // Ensures you get the size right and prevent memory overflow2
-    }
-    else
-      state = REPORTING_STATE;
+    
+    getMeasurements();
+
+    state = REPORTING_STATE;
     break;
 
   case REPORTING_STATE:
@@ -125,4 +117,30 @@ void getBatteryCharge()
   float voltage = analogRead(BATT) * 0.0011224;
 
   snprintf(batteryString, sizeof(batteryString), "%3.1f V", voltage);
+}
+
+void getMeasurements()
+{
+
+  getSignalStrength(); // Get Signal Strength
+
+  getBatteryCharge(); // Get Battery Charge Percentage
+
+  // Read Temperature from Sensor.
+  if (sensor.read())
+  {
+    snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", sensor.celsius()); // Ensures you get the size right and prevent memory overflow2
+  }
+}
+
+int verboseMode(String toggleSensor){
+  if (toggleSensor == "on"){
+    waitUntil(PublishDelayFunction);
+    Particle.publish("Temperature", temperatureString, PRIVATE);
+    return 1;
+  }else if (toggleSensor == "off" ) {
+    return 0;
+
+
+  }
 }
