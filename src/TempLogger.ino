@@ -11,10 +11,8 @@
 // v1.03 - Added measurements for WiFi signal
 // v1.04 - Added verbose and Measurements Function.
 
-// Version Number.
-// #define VERSION "1.00"      - Don't use common names in #define
-// #define SOFTWARERELEASENUMBER "1.00"               // Keep track of release numbers
-const char releaseNumber[6] = "1.03"; // Displays the release on the menu ****  this is not a production release ****
+
+const char releaseNumber[6] = "1.04"; // Displays the release on the menu ****  this is not a production release ****
 
 #include "DS18.h"
 
@@ -54,17 +52,22 @@ void loop()
   switch (state)
   {
   case IDLE_STATE:
-   System.sleep(D3,CHANGE);
+   System.sleep(D3,CHANGE);  // We are not ready to put the Particle to sleep yet
+   // Idle state should be where the Particle spends its time waiting to do something
+   // Bring back the code you had before that checks to see if 5 minutes have passed
+   // Once they have, change the state to MEASURING_STATE
     break;
 
-  case MEASURING_STATE:
+  case MEASURING_STATE:  // Excellent, you nailed this state
     
-    getMeasurements();
+    getMeasurements(); 
 
     state = REPORTING_STATE;
     break;
 
-  case REPORTING_STATE:
+  case REPORTING_STATE:   // Remember that you are in a finite state machine - you know exactly what the Electron 
+  // has done up to this point.  You don't have to waitUntil here because there is no issues with rate limiteing
+  // Otherwise, you nailed this state as well
     waitUntil(PublishDelayFunction);
     Particle.publish("Temperature", temperatureString, PRIVATE);
     state = IDLE_STATE;
