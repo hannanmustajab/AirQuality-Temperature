@@ -10,7 +10,7 @@
 // v1.02 - Moved pin to D6 and started to add finite state machine structure
 // v1.03 - Added measurements for WiFi signal
 // v1.04 - Added verbose and Measurements Function.
-
+// v1.05 - Added Particle Function For VerboseMode and Setup the IDLE State.
 
 const char releaseNumber[6] = "1.04"; // Displays the release on the menu ****  this is not a production release ****
 
@@ -18,6 +18,8 @@ const char releaseNumber[6] = "1.04"; // Displays the release on the menu ****  
 
 // Initialize modules here
 DS18 sensor(D3); // Initialize sensor object
+
+String toggleSensor = "off";
 
 // State Machine Variables
 enum State
@@ -42,6 +44,7 @@ void setup()
   Particle.variable("Release", releaseNumber);
   Particle.variable("Signal", signalString); // Particle variables that enable monitoring using the mobile app
   Particle.variable("Battery", batteryString);
+  Particle.function("verboseMode", verboseMode);  // Added Particle Function For VerboseMode. 
 
   state = IDLE_STATE;
 }
@@ -52,23 +55,26 @@ void loop()
   switch (state)
   {
   case IDLE_STATE:
-   System.sleep(D3,CHANGE);  // We are not ready to put the Particle to sleep yet
-   // Idle state should be where the Particle spends its time waiting to do something
-   // Bring back the code you had before that checks to see if 5 minutes have passed
-   // Once they have, change the state to MEASURING_STATE
+    //System.sleep(D3,CHANGE);  // We are not ready to put the Particle to sleep yet
+    // Idle state should be where the Particle spends its time waiting to do something
+    // Bring back the code you had before that checks to see if 5 minutes have passed
+    // Once they have, change the state to MEASURING_STATE
+
+    waitUntil(IDLEDelayFunction);
+    state = MEASURING_STATE;
+
     break;
 
-  case MEASURING_STATE:  // Excellent, you nailed this state
-    
-    getMeasurements(); 
+  case MEASURING_STATE: // Excellent, you nailed this state
+
+    getMeasurements();
 
     state = REPORTING_STATE;
     break;
 
-  case REPORTING_STATE:   // Remember that you are in a finite state machine - you know exactly what the Electron 
-  // has done up to this point.  You don't have to waitUntil here because there is no issues with rate limiteing
-  // Otherwise, you nailed this state as well
-    waitUntil(PublishDelayFunction);
+  case REPORTING_STATE: // Remember that you are in a finite state machine - you know exactly what the Electron
+                        // has done up to this point.  You don't have to waitUntil here because there is no issues with rate limiteing
+                        // Otherwise, you nailed this state as well
     Particle.publish("Temperature", temperatureString, PRIVATE);
     state = IDLE_STATE;
     break;
@@ -86,8 +92,21 @@ bool PublishDelayFunction()
     tstamp = millis();
     return 1;
   }
+}
 
-  /* Restructure the main loop to put this code into states
+bool IDLEDelayFunction()
+{
+  static unsigned long timeStamp = 0;
+  if (millis() - timeStamp <= 5 * 60 * 1000)
+    return 0;
+  else
+  {
+    timeStamp = millis();
+    return 1;
+  }
+}
+
+/* Restructure the main loop to put this code into states
   Use a Switch case statement to control program flow based on the state
   Idle state is where the device waits for the 5 second to pass between samples
   Measuring state where you update the temperatureString
@@ -95,7 +114,6 @@ bool PublishDelayFunction()
   Then back to the idle state for the next samples
   Give it a shot and let me know if you get stuck.  Your main loop should only be the Switch case statement on "state"
   */
-}
 
 void getSignalStrength()
 {
@@ -127,14 +145,21 @@ void getMeasurements()
   }
 }
 
-int verboseMode(String toggleSensor){
-  if (toggleSensor == "on"){
+int verboseMode(String toggleSensor)
+{
+  if (toggleSensor == "on")
+  {
+    toggleSensor = "on";
     waitUntil(PublishDelayFunction);
     Particle.publish("Temperature", temperatureString, PRIVATE);
     return 1;
-  }else if (toggleSensor == "off" ) {
+  }
+  else if (toggleSensor == "off")
+  {
     return 0;
-
-
+  }
+  else
+  {
+    //
   }
 }
