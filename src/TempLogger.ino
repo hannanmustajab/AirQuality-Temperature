@@ -20,8 +20,6 @@ const char releaseNumber[6] = "1.06"; // Displays the release on the menu ****  
 // Initialize modules here
 DS18 sensor(D3); // Initialize sensor object
 
-String toggleSensor = "on";
-
 // State Machine Variables
 enum State
 {
@@ -38,7 +36,7 @@ char temperatureString[16]; // Temperature string for Reporting
 char batteryString[16];     // Battery value for reporting
 
 unsigned long updateRate = 5000; // Define Update Rate
-static unsigned long refreshRate = 10000;
+static unsigned long refreshRate = 1;
 
 void setup()
 {
@@ -63,9 +61,9 @@ void loop()
     // Once they have, change the state to MEASURING_STATE
 
     static unsigned long TimePassed = 0;        // If you define a variable in a case - then you need to enclose that case in brackets to define scope 
-    if (millis() - TimePassed >= refreshRate ) {
+    if (Time.minute() - TimePassed >= refreshRate ) {
     state = MEASURING_STATE;
-    TimePassed = millis();                      // This will work - but only if we never put the device to sleep
+    TimePassed = Time.minute();                     // This will work - but only if we never put the device to sleep
     }                                           // Try defining the interval using Time functions as the interval will almost 
                                                 // always be minutes if not hours.  Also, millis() stops counting when you sleep
     break;
@@ -135,7 +133,7 @@ void getMeasurements()
   // Read Temperature from Sensor.
   if (sensor.read())
   {
-    snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", sensor.celsius()); // Ensures you get the size right and prevent memory overflow2
+    snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", sensor.celsius()); 
   }
 }
 
@@ -143,7 +141,7 @@ bool verboseMode(String toggleSensor)
 {
   if (toggleSensor == "on")
   {
-    toggleSensor = "on";
+    
     return 1;
   }
   else 

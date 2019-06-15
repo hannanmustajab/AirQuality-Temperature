@@ -17,6 +17,7 @@
 // v1.03 - Added measurements for WiFi signal
 // v1.04 - Added verbose and Measurements Function.
 // v1.05 - Added Particle Function For VerboseMode and Setup the IDLE State.
+// v1.06 - Added comments for moving IDLE to Time not millis() 
 
 void setup();
 void loop();
@@ -25,15 +26,13 @@ void getSignalStrength();
 void getBatteryCharge();
 void getMeasurements();
 bool verboseMode(String toggleSensor);
-#line 15 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
-const char releaseNumber[6] = "1.04"; // Displays the release on the menu ****  this is not a production release ****
+#line 16 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
+const char releaseNumber[6] = "1.06"; // Displays the release on the menu ****  this is not a production release ****
 
 #include "DS18.h"
 
 // Initialize modules here
 DS18 sensor(D3); // Initialize sensor object
-
-String toggleSensor = "on";
 
 // State Machine Variables
 enum State
@@ -51,7 +50,7 @@ char temperatureString[16]; // Temperature string for Reporting
 char batteryString[16];     // Battery value for reporting
 
 unsigned long updateRate = 5000; // Define Update Rate
-static unsigned long refreshRate = 10000;
+static unsigned long refreshRate = 1;
 
 void setup()
 {
@@ -75,11 +74,12 @@ void loop()
     // Bring back the code you had before that checks to see if 5 minutes have passed
     // Once they have, change the state to MEASURING_STATE
 
-    static unsigned long TimePassed = 0;
-    if (millis() - TimePassed >= refreshRate ) {
+    static unsigned long TimePassed = 0;        // If you define a variable in a case - then you need to enclose that case in brackets to define scope 
+    if (Time.minute() - TimePassed >= refreshRate ) {
     state = MEASURING_STATE;
-    TimePassed = millis();
-    }
+    TimePassed = Time.minute();                     // This will work - but only if we never put the device to sleep
+    }                                           // Try defining the interval using Time functions as the interval will almost 
+                                                // always be minutes if not hours.  Also, millis() stops counting when you sleep
     break;
 
   case MEASURING_STATE: // Excellent, you nailed this state
@@ -147,7 +147,7 @@ void getMeasurements()
   // Read Temperature from Sensor.
   if (sensor.read())
   {
-    snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", sensor.celsius()); // Ensures you get the size right and prevent memory overflow2
+    snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", sensor.celsius()); 
   }
 }
 
@@ -155,12 +155,16 @@ bool verboseMode(String toggleSensor)
 {
   if (toggleSensor == "on")
   {
-    toggleSensor = "on";
+    
     return 1;
   }
   else 
   {
     return 0;
   }
-
 }
+
+// Particle functions accept a string and must retun a boolean.  
+// Extract the value you want (1 or 0) and discard the rest.  If you don't get a valid input return a 0
+// If you can make this work, you can change the inputs to "on" and "off" easily.  Use the function to set
+// the value of a boolean verboseMode and then put a conditional before every Particle.publish().
