@@ -11,8 +11,9 @@
 // v1.03 - Added measurements for WiFi signal
 // v1.04 - Added verbose and Measurements Function.
 // v1.05 - Added Particle Function For VerboseMode and Setup the IDLE State.
+// v1.06 - Added comments for moving IDLE to Time not millis() 
 
-const char releaseNumber[6] = "1.04"; // Displays the release on the menu ****  this is not a production release ****
+const char releaseNumber[6] = "1.06"; // Displays the release on the menu ****  this is not a production release ****
 
 #include "DS18.h"
 
@@ -61,11 +62,12 @@ void loop()
     // Bring back the code you had before that checks to see if 5 minutes have passed
     // Once they have, change the state to MEASURING_STATE
 
-    static unsigned long TimePassed = 0;
+    static unsigned long TimePassed = 0;        // If you define a variable in a case - then you need to enclose that case in brackets to define scope 
     if (millis() - TimePassed >= refreshRate ) {
     state = MEASURING_STATE;
-    TimePassed = millis();
-    }
+    TimePassed = millis();                      // This will work - but only if we never put the device to sleep
+    }                                           // Try defining the interval using Time functions as the interval will almost 
+                                                // always be minutes if not hours.  Also, millis() stops counting when you sleep
     break;
 
   case MEASURING_STATE: // Excellent, you nailed this state
@@ -148,5 +150,9 @@ bool verboseMode(String toggleSensor)
   {
     return 0;
   }
-
 }
+
+// Particle functions accept a string and must retun a boolean.  
+// Extract the value you want (1 or 0) and discard the rest.  If you don't get a valid input return a 0
+// If you can make this work, you can change the inputs to "on" and "off" easily.  Use the function to set
+// the value of a boolean verboseMode and then put a conditional before every Particle.publish().
