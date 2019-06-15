@@ -21,11 +21,10 @@
 void setup();
 void loop();
 bool PublishDelayFunction();
-bool IDLEDelayFunction();
 void getSignalStrength();
 void getBatteryCharge();
 void getMeasurements();
-int verboseMode(String toggleSensor);
+bool verboseMode(String toggleSensor);
 #line 15 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
 const char releaseNumber[6] = "1.04"; // Displays the release on the menu ****  this is not a production release ****
 
@@ -34,7 +33,7 @@ const char releaseNumber[6] = "1.04"; // Displays the release on the menu ****  
 // Initialize modules here
 DS18 sensor(D3); // Initialize sensor object
 
-String toggleSensor = "off";
+String toggleSensor = "on";
 
 // State Machine Variables
 enum State
@@ -52,6 +51,7 @@ char temperatureString[16]; // Temperature string for Reporting
 char batteryString[16];     // Battery value for reporting
 
 unsigned long updateRate = 5000; // Define Update Rate
+static unsigned long refreshRate = 10000;
 
 void setup()
 {
@@ -75,9 +75,11 @@ void loop()
     // Bring back the code you had before that checks to see if 5 minutes have passed
     // Once they have, change the state to MEASURING_STATE
 
-    waitUntil(IDLEDelayFunction);
+    static unsigned long TimePassed = 0;
+    if (millis() - TimePassed >= refreshRate ) {
     state = MEASURING_STATE;
-
+    TimePassed = millis();
+    }
     break;
 
   case MEASURING_STATE: // Excellent, you nailed this state
@@ -90,7 +92,7 @@ void loop()
   case REPORTING_STATE: // Remember that you are in a finite state machine - you know exactly what the Electron
                         // has done up to this point.  You don't have to waitUntil here because there is no issues with rate limiteing
                         // Otherwise, you nailed this state as well
-    Particle.publish("Temperature", temperatureString, PRIVATE);
+    if (verboseMode) Particle.publish("Temperature", temperatureString, PRIVATE);
     state = IDLE_STATE;
     break;
   }
@@ -109,17 +111,6 @@ bool PublishDelayFunction()
   }
 }
 
-bool IDLEDelayFunction()
-{
-  static unsigned long timeStamp = 0;
-  if (millis() - timeStamp <= 5 * 60 * 1000)
-    return 0;
-  else
-  {
-    timeStamp = millis();
-    return 1;
-  }
-}
 
 /* Restructure the main loop to put this code into states
   Use a Switch case statement to control program flow based on the state
@@ -160,21 +151,16 @@ void getMeasurements()
   }
 }
 
-int verboseMode(String toggleSensor)
+bool verboseMode(String toggleSensor)
 {
   if (toggleSensor == "on")
   {
     toggleSensor = "on";
-    waitUntil(PublishDelayFunction);
-    Particle.publish("Temperature", temperatureString, PRIVATE);
     return 1;
   }
-  else if (toggleSensor == "off")
+  else 
   {
     return 0;
   }
-  else
-  {
-    //
-  }
+
 }
