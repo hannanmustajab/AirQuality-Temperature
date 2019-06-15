@@ -38,15 +38,20 @@ char batteryString[16];     // Battery value for reporting
 unsigned long updateRate = 5000; // Define Update Rate
 static unsigned long refreshRate = 1;
 
+
+
+
 void setup()
 {
+  getTemperature();
   Particle.variable("celsius", temperatureString); // Setup Particle Variable
   Particle.variable("Release", releaseNumber);
   Particle.variable("Signal", signalString); // Particle variables that enable monitoring using the mobile app
   Particle.variable("Battery", batteryString);
   Particle.function("verboseMode", verboseMode);  // Added Particle Function For VerboseMode. 
-
+  
   state = IDLE_STATE;
+  
 }
 
 void loop()
@@ -123,6 +128,15 @@ void getBatteryCharge()
   snprintf(batteryString, sizeof(batteryString), "%3.1f V", voltage);
 }
 
+void getTemperature()
+{
+  if (sensor.read())
+  {
+    snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", sensor.celsius()); 
+  }
+  
+}
+
 void getMeasurements()
 {
 
@@ -130,11 +144,8 @@ void getMeasurements()
 
   getBatteryCharge(); // Get Battery Charge Percentage
 
-  // Read Temperature from Sensor.
-  if (sensor.read())
-  {
-    snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", sensor.celsius()); 
-  }
+  getTemperature(); // Read Temperature from Sensor.
+  
 }
 
 bool verboseMode(String toggleSensor)
