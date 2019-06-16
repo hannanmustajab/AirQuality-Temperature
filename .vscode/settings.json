@@ -7,6 +7,6 @@
     "particle.firmwareVersion": "1.2.1-rc.2",
     "particle.targetPlatform": "argon",
     "cortex-debug.openocdPath": "/Users/abdulhannanmustajab/.particle/toolchains/openocd/0.10.0-particle.1/bin/openocd",
-    "particle.targetDevice": "hannan-argon",
+    "particle.targetDevice": "Argon-Dev",
     "C_Cpp.errorSquiggles": "Disabled"
 }

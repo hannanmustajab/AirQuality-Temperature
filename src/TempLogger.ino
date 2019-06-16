@@ -5,6 +5,19 @@
  * Date:
  */
 
+/* 
+      ***  Next Steps ***
+      1) Celan up your logic on the set verboseMode - what if the input is neither "on" nor "off"
+      2) clean up the extra comments and make sure you have commented all the remaining code
+      3) Initalize the verbose mode as the current approach is undefined - suggest verboseMode = false;
+      4) Add a new function that will publish (if in verboseMode) the state transition respecting Particle rate limits
+      5) Add a webhook that will publish the temperature and battery level to Ubidots via a Webhook.
+          - Excellent tutoral here: http://help.ubidots.com/articles/513304-connect-your-particle-device-to-ubidots-using-particle-webhooks
+      6) Add a check that only sends the webhook if one of these are true: top of the hour OR temperature value has changed
+ */
+
+
+
 // v1.00 - Got the metering working, tested with sensor - viable code
 // v1.01 - Added release level to variables
 // v1.02 - Moved pin to D6 and started to add finite state machine structure
@@ -14,9 +27,9 @@
 // v1.06 - Added comments for moving IDLE to Time not millis() 
 // v.107 - Made changes for IDLE and VerboseMode. 
 
-const char releaseNumber[6] = "1.06"; // Displays the release on the menu ****  this is not a production release ****
+const char releaseNumber[6] = "1.07"; // Displays the release on the menu ****  this is not a production release ****
 
-#include "DS18.h"
+#include "DS18.h"             // Include the OneWire library
 
 // Initialize modules here
 DS18 sensor(D3); // Initialize sensor object

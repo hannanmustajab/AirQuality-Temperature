@@ -3,13 +3,26 @@
 /******************************************************/
 
 #include "application.h"
-#line 1 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
+#line 1 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
 /*
  * Project TempLogger
  * Description: Reading Temperature from OneWire 18B20 and sending it to particle cloud. 
  * Author: Abdul Hannan Mustajab
  * Date:
  */
+
+/* 
+      ***  Next Steps ***
+      1) Celan up your logic on the set verboseMode - what if the input is neither "on" nor "off"
+      2) clean up the extra comments and make sure you have commented all the remaining code
+      3) Initalize the verbose mode as the current approach is undefined - suggest verboseMode = false;
+      4) Add a new function that will publish (if in verboseMode) the state transition respecting Particle rate limits
+      5) Add a webhook that will publish the temperature and battery level to Ubidots via a Webhook.
+          - Excellent tutoral here: http://help.ubidots.com/articles/513304-connect-your-particle-device-to-ubidots-using-particle-webhooks
+      6) Add a check that only sends the webhook if one of these are true: top of the hour OR temperature value has changed
+ */
+
+
 
 // v1.00 - Got the metering working, tested with sensor - viable code
 // v1.01 - Added release level to variables
@@ -27,10 +40,10 @@ void getSignalStrength();
 void getBatteryCharge();
 void getTemperature();
 void getMeasurements();
-#line 17 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
-const char releaseNumber[6] = "1.06"; // Displays the release on the menu ****  this is not a production release ****
+#line 30 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
+const char releaseNumber[6] = "1.07"; // Displays the release on the menu ****  this is not a production release ****
 
-#include "DS18.h"
+#include "DS18.h"             // Include the OneWire library
 
 // Initialize modules here
 DS18 sensor(D3); // Initialize sensor object
