@@ -12,6 +12,7 @@
 // v1.04 - Added verbose and Measurements Function.
 // v1.05 - Added Particle Function For VerboseMode and Setup the IDLE State.
 // v1.06 - Added comments for moving IDLE to Time not millis() 
+// v.107 - Made changes for IDLE and VerboseMode. 
 
 const char releaseNumber[6] = "1.06"; // Displays the release on the menu ****  this is not a production release ****
 
@@ -19,6 +20,7 @@ const char releaseNumber[6] = "1.06"; // Displays the release on the menu ****  
 
 // Initialize modules here
 DS18 sensor(D3); // Initialize sensor object
+
 
 // State Machine Variables
 enum State
@@ -39,6 +41,11 @@ unsigned long updateRate = 5000; // Define Update Rate
 static unsigned long refreshRate = 1;
 
 
+bool SetVerboseMode(String command);
+bool verboseMode;
+
+
+
 
 
 void setup()
@@ -48,7 +55,7 @@ void setup()
   Particle.variable("Release", releaseNumber);
   Particle.variable("Signal", signalString); // Particle variables that enable monitoring using the mobile app
   Particle.variable("Battery", batteryString);
-  Particle.function("verboseMode", verboseMode);  // Added Particle Function For VerboseMode. 
+  Particle.function("verboseMode", SetVerboseMode);  // Added Particle Function For VerboseMode. 
   
   state = IDLE_STATE;
   
@@ -64,7 +71,6 @@ void loop()
     // Idle state should be where the Particle spends its time waiting to do something
     // Bring back the code you had before that checks to see if 5 minutes have passed
     // Once they have, change the state to MEASURING_STATE
-
     static unsigned long TimePassed = 0;        // If you define a variable in a case - then you need to enclose that case in brackets to define scope 
     if (Time.minute() - TimePassed >= refreshRate ) {
     state = MEASURING_STATE;
@@ -74,7 +80,7 @@ void loop()
     break;
 
   case MEASURING_STATE: // Excellent, you nailed this state
-
+  
     getMeasurements();
 
     state = REPORTING_STATE;
@@ -148,17 +154,18 @@ void getMeasurements()
   
 }
 
-bool verboseMode(String toggleSensor)
+bool SetVerboseMode(String command)
 {
-  if (toggleSensor == "on")
+
+  if(command == "on")
   {
-    
+    verboseMode = true;
     return 1;
   }
-  else 
-  {
+  else if (command == "off"){
+    verboseMode = false;
     return 0;
-  }
+    }
 }
 
 // Particle functions accept a string and must retun a boolean.  
