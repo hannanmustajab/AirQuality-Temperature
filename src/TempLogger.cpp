@@ -3,7 +3,7 @@
 /******************************************************/
 
 #include "application.h"
-#line 1 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
+#line 1 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
 /*
  * Project TempLogger
  * Description: Reading Temperature from OneWire 18B20 and sending it to particle cloud. 
@@ -13,7 +13,7 @@
 
 /* 
       ***  Next Steps ***
-      1) Celan up your logic on the set verboseMode - what if the input is neither "on" nor "off"
+      1) Clean up your logic on the set verboseMode - what if the input is neither "on" nor "off"
       2) clean up the extra comments and make sure you have commented all the remaining code
       3) Initalize the verbose mode as the current approach is undefined - suggest verboseMode = false;
       4) Add a new function that will publish (if in verboseMode) the state transition respecting Particle rate limits
@@ -40,12 +40,13 @@ void getSignalStrength();
 void getBatteryCharge();
 void getTemperature();
 void getMeasurements();
-#line 30 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
-const char releaseNumber[6] = "1.07"; // Displays the release on the menu ****  this is not a production release ****
+#line 30 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
+const char releaseNumber[6] = "1.07"; // Displays the release on the menu 
 
 #include "DS18.h"             // Include the OneWire library
 
 // Initialize modules here
+
 DS18 sensor(D3); // Initialize sensor object
 
 
@@ -60,20 +61,23 @@ enum State
 State state = INITIALIZATION_STATE;
 
 // Variables Related To Particle Mobile Application Reporting
+
 char signalString[16];      // Used to communicate Wireless RSSI and Description
 char temperatureString[16]; // Temperature string for Reporting
 char batteryString[16];     // Battery value for reporting
 
+// Variables Related To Update and Refresh Rates. 
+
 unsigned long updateRate = 5000; // Define Update Rate
-static unsigned long refreshRate = 1;
+static unsigned long refreshRate = 1; // Time period for IDLE state. 
 
 
-bool SetVerboseMode(String command);
-bool verboseMode;
+bool SetVerboseMode(String command); // Function to Set verbose mode. 
+bool verboseMode=false; // Variable VerboseMode. 
 
 
 
-
+// Setup Particle Variables and Functions here. 
 
 void setup()
 {
@@ -84,7 +88,9 @@ void setup()
   Particle.variable("Battery", batteryString);
   Particle.function("verboseMode", SetVerboseMode);  // Added Particle Function For VerboseMode. 
   
+  if (verboseMode) Particle.publish("State","IDLE", PRIVATE);
   state = IDLE_STATE;
+  
   
 }
 
@@ -93,31 +99,42 @@ void loop()
 
   switch (state)
   {
-  case IDLE_STATE:
-    //System.sleep(D3,CHANGE);  // We are not ready to put the Particle to sleep yet
-    // Idle state should be where the Particle spends its time waiting to do something
-    // Bring back the code you had before that checks to see if 5 minutes have passed
-    // Once they have, change the state to MEASURING_STATE
-    static unsigned long TimePassed = 0;        // If you define a variable in a case - then you need to enclose that case in brackets to define scope 
-    if (Time.minute() - TimePassed >= refreshRate ) {
+  case IDLE_STATE: // IDLE State.
+    
+    static unsigned long TimePassed = 0;        
+    if (Time.minute() - TimePassed >= refreshRate ) 
+    {
     state = MEASURING_STATE;
-    TimePassed = Time.minute();                     // This will work - but only if we never put the device to sleep
-    }                                           // Try defining the interval using Time functions as the interval will almost 
-                                                // always be minutes if not hours.  Also, millis() stops counting when you sleep
-    break;
+    TimePassed = Time.minute();     
+    if(verboseMode){
+      waitUntil(PublishDelayFunction);
+      Particle.publish("State","MEASURING",PRIVATE);
+      }              
+    }
+  break;
 
-  case MEASURING_STATE: // Excellent, you nailed this state
+  case MEASURING_STATE: // Measuring State. 
   
-    getMeasurements();
+    getMeasurements(); // Get Measurements and Move to Reporting State. 
 
     state = REPORTING_STATE;
+     if(verboseMode){
+      waitUntil(PublishDelayFunction);
+      Particle.publish("State","REPORTING",PRIVATE);
+      
+    } 
     break;
 
-  case REPORTING_STATE: // Remember that you are in a finite state machine - you know exactly what the Electron
-                        // has done up to this point.  You don't have to waitUntil here because there is no issues with rate limiteing
-                        // Otherwise, you nailed this state as well
-    if (verboseMode) Particle.publish("Temperature", temperatureString, PRIVATE);
+  case REPORTING_STATE: //
+    if (verboseMode) Particle.publish("Temperature", temperatureString, PRIVATE); 
+    
+     if(verboseMode){
+      waitUntil(PublishDelayFunction);
+      Particle.publish("State","IDLE",PRIVATE);
+      
+    } 
     state = IDLE_STATE;
+    
     break;
   }
 }
@@ -125,7 +142,7 @@ void loop()
 // Function to create a delay in the publish time
 bool PublishDelayFunction()
 {
-  static unsigned long tstamp = 0; // Static variables are defined once and retain their value
+  static unsigned long tstamp = 0; 
   if (millis() - tstamp <= updateRate)
     return 0;
   else
@@ -135,15 +152,7 @@ bool PublishDelayFunction()
   }
 }
 
-
-/* Restructure the main loop to put this code into states
-  Use a Switch case statement to control program flow based on the state
-  Idle state is where the device waits for the 5 second to pass between samples
-  Measuring state where you update the temperatureString
-  Reporting state where you publish the results
-  Then back to the idle state for the next samples
-  Give it a shot and let me know if you get stuck.  Your main loop should only be the Switch case statement on "state"
-  */
+// Functions for mobile app reporting. 
 
 void getSignalStrength()
 {
@@ -161,6 +170,7 @@ void getBatteryCharge()
   snprintf(batteryString, sizeof(batteryString), "%3.1f V", voltage);
 }
 
+// Function to get temperature value from DS18B20. 
 void getTemperature()
 {
   if (sensor.read())
@@ -181,21 +191,25 @@ void getMeasurements()
   
 }
 
+// Function to Toggle VerboseMode. 
+
 bool SetVerboseMode(String command)
 {
 
-  if(command == "on")
+  if(command == "1")
   {
     verboseMode = true;
+    waitUntil(PublishDelayFunction);
+    Particle.publish("Mode","Verbose Mode Started.", PRIVATE);
     return 1;
   }
-  else if (command == "off"){
+  else if (command == "0"){
     verboseMode = false;
-    return 0;
+    waitUntil(PublishDelayFunction);
+    Particle.publish("Mode","Verbose Mode Stopped.", PRIVATE);
+    return 1;
+    }
+    else {
+      return 0;
     }
 }
-
-// Particle functions accept a string and must retun a boolean.  
-// Extract the value you want (1 or 0) and discard the rest.  If you don't get a valid input return a 0
-// If you can make this work, you can change the inputs to "on" and "off" easily.  Use the function to set
-// the value of a boolean verboseMode and then put a conditional before every Particle.publish().
