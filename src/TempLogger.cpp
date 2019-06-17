@@ -86,12 +86,16 @@ float temperatureHook; // Current Temp Reading.
 float lastPublishValue; // LastPublished Reading.
 
 
+
 // Setup Particle Variables and Functions here. 
 
 void setup()
 {
   getTemperature();
  
+temperatureHook = 0; // Current Temp Reading. 
+lastPublishValue =1; // LastPublished Reading.
+
   Particle.variable("celsius", temperatureString); // Setup Particle Variable
   Particle.variable("Release", releaseNumber);
   Particle.variable("Signal", signalString); // Particle variables that enable monitoring using the mobile app
@@ -233,8 +237,7 @@ bool UBIDotsHandler(){
  
   
     char data[256];
-    float temperatureHook = sensor.celsius();
-    float lastPublishValue = 1;
+    temperatureHook = sensor.celsius();
     snprintf(data,sizeof(data),"{\"Temperature\":%3.1f, \"Battery\":%3.1f}",temperatureHook, batteryString);
     Particle.publish("Air-Quality-Hook",data,PRIVATE);
     lastPublishValue = temperatureHook;
