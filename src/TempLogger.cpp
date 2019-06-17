@@ -31,7 +31,10 @@
 // v1.04 - Added verbose and Measurements Function.
 // v1.05 - Added Particle Function For VerboseMode and Setup the IDLE State.
 // v1.06 - Added comments for moving IDLE to Time not millis() 
-// v.107 - Made changes for IDLE and VerboseMode. 
+// v1.07 - Made changes for IDLE and VerboseMode. 
+// v1.08 - Fixed Verbose Mode, Cleaned Comments and Added State Transition Monitoring . 
+// v1.09 - Added UBIDots handler and Setup WebHooks.
+
 
 void setup();
 void loop();
@@ -40,10 +43,14 @@ void getSignalStrength();
 void getBatteryCharge();
 void getTemperature();
 void getMeasurements();
-#line 30 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
-const char releaseNumber[6] = "1.07"; // Displays the release on the menu 
+bool UBIDotsHandler();
+#line 33 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
+const char releaseNumber[6] = "1.08"; // Displays the release on the menu 
 
 #include "DS18.h"             // Include the OneWire library
+
+
+
 
 // Initialize modules here
 
@@ -75,6 +82,8 @@ static unsigned long refreshRate = 1; // Time period for IDLE state.
 bool SetVerboseMode(String command); // Function to Set verbose mode. 
 bool verboseMode=false; // Variable VerboseMode. 
 
+float temperatureHook; // Current Temp Reading. 
+float lastPublishValue; // LastPublished Reading.
 
 
 // Setup Particle Variables and Functions here. 
@@ -82,6 +91,7 @@ bool verboseMode=false; // Variable VerboseMode.
 void setup()
 {
   getTemperature();
+ 
   Particle.variable("celsius", temperatureString); // Setup Particle Variable
   Particle.variable("Release", releaseNumber);
   Particle.variable("Signal", signalString); // Particle variables that enable monitoring using the mobile app
@@ -96,7 +106,8 @@ void setup()
 
 void loop()
 {
-
+  
+ 
   switch (state)
   {
   case IDLE_STATE: // IDLE State.
@@ -116,6 +127,7 @@ void loop()
   case MEASURING_STATE: // Measuring State. 
   
     getMeasurements(); // Get Measurements and Move to Reporting State. 
+  // if (abs(temperatureHook - lastPublishValue) > 1) state = REPORTING_STATE;
 
     state = REPORTING_STATE;
      if(verboseMode){
@@ -127,8 +139,10 @@ void loop()
 
   case REPORTING_STATE: //
     if (verboseMode) Particle.publish("Temperature", temperatureString, PRIVATE); 
+    if (abs(temperatureHook - lastPublishValue) > 1) UBIDotsHandler();
     
-     if(verboseMode){
+  
+   if(verboseMode){
       waitUntil(PublishDelayFunction);
       Particle.publish("State","IDLE",PRIVATE);
       
@@ -189,6 +203,7 @@ void getMeasurements()
 
   getTemperature(); // Read Temperature from Sensor.
   
+  
 }
 
 // Function to Toggle VerboseMode. 
@@ -213,3 +228,15 @@ bool SetVerboseMode(String command)
       return 0;
     }
 }
+
+bool UBIDotsHandler(){
+ 
+  
+    char data[256];
+    float temperatureHook = sensor.celsius();
+    float lastPublishValue = 1;
+    snprintf(data,sizeof(data),"{\"Temperature\":%3.1f, \"Battery\":%3.1f}",temperatureHook, batteryString);
+    Particle.publish("Air-Quality-Hook",data,PRIVATE);
+    lastPublishValue = temperatureHook;
+    return 1;
+    }
