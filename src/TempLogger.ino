@@ -57,34 +57,33 @@ State state = INITIALIZATION_STATE;
 
 // Variables Related To Particle Mobile Application Reporting
 
-char signalString[16];                                                      // Used to communicate Wireless RSSI and Description
-char temperatureString[16];                                                 // Temperature string for Reporting
-char batteryString[16];                                                     // Battery value for reporting
+char signalString[16];      // Used to communicate Wireless RSSI and Description
+char temperatureString[16]; // Temperature string for Reporting
+char batteryString[16];     // Battery value for reporting
 
 // Variables Related To Update and Refresh Rates. 
 
-unsigned long updateRate = 5000;                                            // Define Update Rate
-static unsigned long refreshRate = 1;                                       // Time period for IDLE state. 
+unsigned long updateRate = 5000; // Define Update Rate
+static unsigned long refreshRate = 1; // Time period for IDLE state. 
 
 
-bool SetVerboseMode(String command);                                        // Function to Set verbose mode.     *** This is not needed with Particle
-bool verboseMode=true;                                                     // Variable VerboseMode. 
+bool SetVerboseMode(String command); // Function to Set verbose mode.     *** This is not needed with Particle
+bool verboseMode=true; // Variable VerboseMode. 
 
-// Section for sensor specific variables and function protoypes. 
+float temperatureInC=0; // Current Temp Reading. 
+static float lastTemperatureInC=0;
 
-float temperatureInC = 0;                                                    // Current temperature in C. 
-float lastTemperatureInC = 0;                                                // Last published temperature Value in C. 
 
 // Setup Particle Variables and Functions here. 
 
 void setup()
 {
-  getTemperature();                                                          //
-  Particle.variable("celsius", temperatureString);                           // Setup Particle Variable
+  getTemperature();
+  Particle.variable("celsius", temperatureString); // Setup Particle Variable
   Particle.variable("Release", releaseNumber);
-  Particle.variable("Signal", signalString);                                 // Particle variables that enable monitoring using the mobile app
+  Particle.variable("Signal", signalString); // Particle variables that enable monitoring using the mobile app
   Particle.variable("Battery", batteryString);
-  Particle.function("verboseMode", SetVerboseMode);                          // Added Particle Function For VerboseMode. 
+  Particle.function("verboseMode", SetVerboseMode);  // Added Particle Function For VerboseMode. 
   
   if (verboseMode) Particle.publish("State","IDLE", PRIVATE);
   state = IDLE_STATE;
@@ -105,34 +104,33 @@ void loop()
     {
     state = MEASURING_STATE;
     TimePassed = Time.minute();     
-   
     if(verboseMode){
-      Particle.publish("State","IDLE",PRIVATE);
+      waitUntil(PublishDelayFunction);
+      Particle.publish("State","MEASURING",PRIVATE);
       }              
     }
   break;
 
-  case MEASURING_STATE:                                                         // Measuring State. 
-    
-    if(verboseMode)
-      {
-      Particle.publish("State","MEASURING",PRIVATE);
-      } 
-    
-    getMeasurements();                                                          // Get Measurements and Move to Reporting State. 
-    if(abs(lastTemperatureInC-temperatureInC) >= 1) state = REPORTING_STATE;
-     state = IDLE_STATE;
-     
+  case MEASURING_STATE: // Measuring State. 
+  
+    getMeasurements(); // Get Measurements and Move to Reporting State. 
+    state = REPORTING_STATE;
+     if(verboseMode){
+      waitUntil(PublishDelayFunction);
+      Particle.publish("State","REPORTING",PRIVATE);
+      
+    } 
     break;
 
   case REPORTING_STATE: //
-  if(verboseMode){
+    if (verboseMode) Particle.publish("Temperature", temperatureString, PRIVATE); 
+    
+    if(abs(lastTemperatureInC-temperatureInC) >= 1) sendUBIDots();
+   if(verboseMode){
       waitUntil(PublishDelayFunction);
-      Particle.publish("State","REPORTING",PRIVATE);
-      Particle.publish("Temperature", temperatureString, PRIVATE); 
+      Particle.publish("State","IDLE",PRIVATE);
+      
     } 
-    sendUBIDots();
-   
     state = IDLE_STATE;
     
     break;
@@ -183,7 +181,7 @@ void getBatteryCharge()
 }
 
 // Function to get temperature value from DS18B20. 
-bool getTemperature()
+    bool getTemperature()
 {
   lastTemperatureInC = temperatureInC; 
   
@@ -229,7 +227,6 @@ bool SetVerboseMode(String command)
       return 0;
     }
 }
-
 void sendUBIDots(){
  
   if(sensor.read()){
