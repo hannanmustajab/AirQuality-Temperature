@@ -48,7 +48,10 @@ enum State
   INITIALIZATION_STATE,
   IDLE_STATE,
   MEASURING_STATE,
-  REPORTING_STATE
+  REPORTING_STATE,
+  RESPONSE_WAIT,
+  ERROR_STATE
+
 };
 State state = INITIALIZATION_STATE;
 
@@ -67,9 +70,8 @@ static unsigned long refreshRate = 1; // Time period for IDLE state.
 bool SetVerboseMode(String command); // Function to Set verbose mode.     *** This is not needed with Particle
 bool verboseMode=false; // Variable VerboseMode. 
 
-float temperatureHook; // Current Temp Reading. 
-float lastPublishValue; // LastPublished Reading.
-
+float temperatureC=0; // Current Temp Reading. 
+static float lastPublishTemperatureC=0;
 
 
 // Setup Particle Variables and Functions here. 
@@ -77,10 +79,7 @@ float lastPublishValue; // LastPublished Reading.
 void setup()
 {
   getTemperature();
- 
-temperatureHook = 0; // Current Temp Reading. 
-lastPublishValue =1; // LastPublished Reading.
-
+  UBIDotsHandler();
   Particle.variable("celsius", temperatureString); // Setup Particle Variable
   Particle.variable("Release", releaseNumber);
   Particle.variable("Signal", signalString); // Particle variables that enable monitoring using the mobile app
@@ -116,7 +115,7 @@ void loop()
   case MEASURING_STATE: // Measuring State. 
   
     getMeasurements(); // Get Measurements and Move to Reporting State. 
-  // if (abs(temperatureHook - lastPublishValue) > 1) state = REPORTING_STATE;
+    if(abs(temperatureC - lastPublishTemperatureC) >= 1) state = REPORTING_STATE;
 
     state = REPORTING_STATE;
      if(verboseMode){
@@ -128,9 +127,8 @@ void loop()
 
   case REPORTING_STATE: //
     if (verboseMode) Particle.publish("Temperature", temperatureString, PRIVATE); 
-    if (abs(temperatureHook - lastPublishValue) > 1) UBIDotsHandler();
     
-  
+    UBIDotsHandler();
    if(verboseMode){
       waitUntil(PublishDelayFunction);
       Particle.publish("State","IDLE",PRIVATE);
@@ -139,7 +137,19 @@ void loop()
     state = IDLE_STATE;
     
     break;
+
+  case RESPONSE_WAIT: // This checks for the response from UBIDOTS. 
+   break;
+
+  case ERROR_STATE: // This state RESETS the devices. 
+    break;
+
+
+
   }
+
+ 
+ 
 }
 
 // Function to create a delay in the publish time
@@ -177,7 +187,8 @@ void getBatteryCharge()
 void getTemperature()
 {
   if (sensor.read())
-  {
+  { 
+   
     snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", sensor.celsius()); 
   }
   
@@ -218,13 +229,14 @@ bool SetVerboseMode(String command)
     }
 }
 
-bool UBIDotsHandler(){
+void UBIDotsHandler(){
  
-  
-    char data[256];
-    temperatureHook = sensor.celsius();
-    snprintf(data,sizeof(data),"{\"Temperature\":%3.1f, \"Battery\":%3.1f}",temperatureHook, batteryString);
+  if(sensor.read()){
+     char data[256];
+    temperatureC = sensor.celsius();
+    snprintf(data,sizeof(data),"{\"Temperature\":%3.1f, \"Battery\":%3.1f}",temperatureC, batteryString);
     Particle.publish("Air-Quality-Hook",data,PRIVATE);
-    lastPublishValue = temperatureHook;
-    return 1;
+    lastPublishTemperatureC = temperatureC;
+    }
+   
     }
