@@ -68,7 +68,7 @@ unsigned long webhookTimeStamp = 0;                         // Webhooks timestam
 bool verboseMode=true;                                      // Variable VerboseMode. 
 float temperatureInC=0;                                     // Current Temp Reading global variable
 float voltage;                                              // Voltage level of the LiPo battery - 3.6-4.2V range
-bool inTransit = true;
+bool inTransit = false;
 
 
 void setup()
@@ -129,13 +129,18 @@ void loop()
   case REPORTING_STATE: //
     if(verboseMode){
       Particle.publish("Temperature", temperatureString, PRIVATE); 
-      sendUBIDots();
-      waitUntil(PublishDelayFunction);
-      Particle.publish("State","Waiting RESPONSE",PRIVATE);
-      state = RESPONSE_WAIT;
     } 
-    
+    sendUBIDots();
+    state = RESPONSE_WAIT;
+    if (verboseMode)
+    {
+        waitUntil(PublishDelayFunction);
+        Particle.publish("State","Waiting RESPONSE",PRIVATE);
+      }
+     
+      
     else state = ERROR_STATE;
+      
     break;
 
   case RESPONSE_WAIT:     
@@ -151,6 +156,7 @@ void loop()
   break;
 
   case ERROR_STATE:                                                       // This state RESETS the devices. 
+  state = IDLE_STATE;
   break;
   }
 }
@@ -234,11 +240,12 @@ void sendUBIDots()
   Particle.publish("Air-Quality-Hook",data,PRIVATE);
   publishTime = Time.minute();
   webhookTimeStamp = millis();
-  inTransit = true;
+  inTransit = false;
 }
 
 
 void UbidotsHandler(const char *event, const char *data){
+  int responseCode = 200;
  if ((responseCode == 200) || (responseCode == 201)){
    Particle.publish("STATE","Response Received",PRIVATE);
    inTransit =  false;
