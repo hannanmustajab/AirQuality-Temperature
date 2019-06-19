@@ -59,12 +59,17 @@ char batteryString[16];                                     // Battery value for
 // Variables Related To Update and Refresh Rates. 
 unsigned long updateRate = 5000;                            // Define Update Rate
 static unsigned long refreshRate = 1;                       // Time period for IDLE state. 
+static unsigned long publishTime =1;                        // Timestamp for Ubidots publish
+const unsigned long webhookTimeout = 45000;                 // Timeperiod to wait for a response from Ubidots before going to error State.
+unsigned long webhookTimeStamp = 0;                         // Webhooks timestamp.
 
 // Variables releated to the sensors 
 // bool SetVerboseMode(String command);                     // Function to Set verbose mode.     *** This is not needed with Particle
 bool verboseMode=true;                                      // Variable VerboseMode. 
 float temperatureInC=0;                                     // Current Temp Reading global variable
 float voltage;                                              // Voltage level of the LiPo battery - 3.6-4.2V range
+bool inTransit = true;
+
 
 void setup()
 {
@@ -104,29 +109,48 @@ void loop()
         Particle.publish("State","Change detected - Reporting",PRIVATE);
       } 
     }
+    
+    else if((Time.minute() - publishTime ) >= (60)){                      // Check if 60 minutes or 1 hr has passed. 
+      state = REPORTING_STATE;
+      if(verboseMode){
+        waitUntil(PublishDelayFunction);
+        Particle.publish("State","Time Passed - Reporting",PRIVATE);      //Tells us that One Hour has passed. 
+      } 
+    }
     else {
       state = IDLE_STATE;
       if(verboseMode){
         waitUntil(PublishDelayFunction);
-        Particle.publish("State","No change - Idle",PRIVATE);
+        Particle.publish("State","No change - Idle",PRIVATE);         
       } 
     }
     break;
 
   case REPORTING_STATE: //
-    if (verboseMode) Particle.publish("Temperature", temperatureString, PRIVATE); 
-    sendUBIDots();
     if(verboseMode){
+      Particle.publish("Temperature", temperatureString, PRIVATE); 
+      sendUBIDots();
       waitUntil(PublishDelayFunction);
-      Particle.publish("State","IDLE",PRIVATE);
+      Particle.publish("State","Waiting RESPONSE",PRIVATE);
+      state = RESPONSE_WAIT;
     } 
-    state = IDLE_STATE;
+    
+    else state = ERROR_STATE;
     break;
 
-  case RESPONSE_WAIT:                                       // This checks for the response from UBIDOTS. 
+  case RESPONSE_WAIT:     
+  
+    if (!inTransit){
+        
+     state = IDLE_STATE;
+    }                                                // This checks for the response from UBIDOTS. 
+    if(millis() - webhookTimeStamp > webhookTimeout ){
+      Particle.publish("spark/device/session/end", "", PRIVATE);          //
+      state = ERROR_STATE;                                                // time out
+    }
   break;
 
-  case ERROR_STATE:                                         // This state RESETS the devices. 
+  case ERROR_STATE:                                                       // This state RESETS the devices. 
   break;
   }
 }
@@ -208,4 +232,18 @@ void sendUBIDots()
   char data[256];
   snprintf(data,sizeof(data),"{\"Temperature\":%3.1f, \"Battery\":%3.1f}",temperatureInC, voltage);
   Particle.publish("Air-Quality-Hook",data,PRIVATE);
+  publishTime = Time.minute();
+  webhookTimeStamp = millis();
+  inTransit = true;
+}
+
+
+void UbidotsHandler(const char *event, const char *data){
+ if ((responseCode == 200) || (responseCode == 201)){
+   Particle.publish("STATE","Response Received",PRIVATE);
+   inTransit =  false;
+ }
+
+
+
 }

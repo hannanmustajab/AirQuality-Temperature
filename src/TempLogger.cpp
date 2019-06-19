@@ -3,7 +3,7 @@
 /******************************************************/
 
 #include "application.h"
-#line 1 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
+#line 1 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
 /*
  * Project TempLogger
  * Description: Reading Temperature from OneWire 18B20 and sending it to particle cloud. 
@@ -46,7 +46,7 @@ bool getMeasurements();
 bool getTemperature();
 bool SetVerboseMode(String command);
 void sendUBIDots();
-#line 34 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
+#line 34 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
 const char releaseNumber[6] = "1.10";                       // Displays the release on the menu 
 
 #include "DS18.h"                                           // Include the OneWire library
@@ -75,6 +75,7 @@ char batteryString[16];                                     // Battery value for
 // Variables Related To Update and Refresh Rates. 
 unsigned long updateRate = 5000;                            // Define Update Rate
 static unsigned long refreshRate = 1;                       // Time period for IDLE state. 
+static unsigned long publishTime =1;
 
 // Variables releated to the sensors 
 // bool SetVerboseMode(String command);                     // Function to Set verbose mode.     *** This is not needed with Particle
@@ -120,6 +121,14 @@ void loop()
         Particle.publish("State","Change detected - Reporting",PRIVATE);
       } 
     }
+    else if((Time.minute() - publishTime ) >= (1)){
+      state = REPORTING_STATE;
+      if(verboseMode){
+        waitUntil(PublishDelayFunction);
+        Particle.publish("State","Time Passed - Reporting",PRIVATE);
+      } 
+      
+      }
     else {
       state = IDLE_STATE;
       if(verboseMode){
@@ -224,4 +233,5 @@ void sendUBIDots()
   char data[256];
   snprintf(data,sizeof(data),"{\"Temperature\":%3.1f, \"Battery\":%3.1f}",temperatureInC, voltage);
   Particle.publish("Air-Quality-Hook",data,PRIVATE);
+   publishTime = Time.minute();
 }
