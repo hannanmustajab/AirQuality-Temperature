@@ -73,14 +73,22 @@ bool inTransit = false;
 
 void setup()
 {
+  // This part receives Response using Particle.subscribe() and tells the response received from Ubidots. 
+
+  char responseTopic[125];
+  String deviceID = System.deviceID();                            // Multiple Electrons share the same hook - keeps things straight
+  deviceID.toCharArray(responseTopic,125);
+  Particle.subscribe(responseTopic, UbidotsHandler, MY_DEVICES);  // Subscribe to the integration response event
+
+
   getTemperature();
   Particle.variable("celsius", temperatureString);          // Setup Particle Variable
   Particle.variable("Release", releaseNumber);              // So we can see what release is running from the console
   Particle.variable("Signal", signalString);                // Particle variables that enable monitoring using the mobile app
   Particle.variable("Battery", batteryString);              // Battery level in V as the Argon does not have a fuel cell
   Particle.function("verboseMode", SetVerboseMode);         // Added Particle Function For VerboseMode. 
-  
   if (verboseMode) Particle.publish("State","IDLE", PRIVATE);
+  
   state = IDLE_STATE;                                       // If we made it this far, we are ready to go to IDLE in the main loop
 }
 
@@ -104,18 +112,20 @@ void loop()
   case MEASURING_STATE:                                    // Measuring State. 
     if (getMeasurements()) {                               // Get Measurements and Move to Reporting State if there is a change
       state = REPORTING_STATE;
-      if(verboseMode){
-        waitUntil(PublishDelayFunction);
-        Particle.publish("State","Change detected - Reporting",PRIVATE);
-      } 
+       if(verboseMode)
+       {
+          waitUntil(PublishDelayFunction);
+          Particle.publish("State","Change detected - Reporting",PRIVATE);
+        } 
     }
     
-    else if((Time.minute() - publishTime ) >= (60)){                      // Check if 60 minutes or 1 hr has passed. 
+    else if((Time.minute() - publishTime ) >= (60))        // Check if 60 minutes or 1 hr has passed. 
+    {                      
       state = REPORTING_STATE;
-      if(verboseMode){
-        waitUntil(PublishDelayFunction);
-        Particle.publish("State","Time Passed - Reporting",PRIVATE);      //Tells us that One Hour has passed. 
-      } 
+        if(verboseMode){
+          waitUntil(PublishDelayFunction);
+          Particle.publish("State","Time Passed - Reporting",PRIVATE);      //Tells us that One Hour has passed. 
+        } 
     }
     else {
       state = IDLE_STATE;
@@ -127,16 +137,19 @@ void loop()
     break;
 
   case REPORTING_STATE: //
-    if(verboseMode){
+    
+    if(verboseMode)
+    {
       Particle.publish("Temperature", temperatureString, PRIVATE); 
     } 
     sendUBIDots();
     state = RESPONSE_WAIT;
-    if (verboseMode)
+    
+  if (verboseMode)
     {
-        waitUntil(PublishDelayFunction);
-        Particle.publish("State","Waiting RESPONSE",PRIVATE);
-      }
+      waitUntil(PublishDelayFunction);
+      Particle.publish("State","Waiting RESPONSE",PRIVATE);
+    }
      
       
     else state = ERROR_STATE;
@@ -148,7 +161,7 @@ void loop()
     if (!inTransit){
         
      state = IDLE_STATE;
-    }                                                // This checks for the response from UBIDOTS. 
+    }                                                                     // This checks for the response from UBIDOTS. 
     if(millis() - webhookTimeStamp > webhookTimeout ){
       Particle.publish("spark/device/session/end", "", PRIVATE);          //
       state = ERROR_STATE;                                                // time out
@@ -163,6 +176,7 @@ void loop()
 
 // Function to create a delay in the publish time
 bool PublishDelayFunction()
+
 {
   static unsigned long tstamp = 0; 
   if (millis() - tstamp <= updateRate)
@@ -216,6 +230,7 @@ bool getTemperature()
 // Function to Toggle VerboseMode. 
 bool SetVerboseMode(String command)
 {
+
   if(command == "1")
   {
     verboseMode = true;
@@ -223,13 +238,29 @@ bool SetVerboseMode(String command)
     Particle.publish("Mode","Verbose Mode Started.", PRIVATE);
     return 1;
   }
+
+  else if(command == "1" || verboseMode == true)
+  {
+    waitUntil(PublishDelayFunction);
+    Particle.publish("Mode","Verbose Mode Already ON.", PRIVATE);
+    return 1;
+  }
+
   else if (command == "0"){
     verboseMode = false;
     waitUntil(PublishDelayFunction);
     Particle.publish("Mode","Verbose Mode Stopped.", PRIVATE);
     return 1;
     }
-    else {
+  
+  else if (command == "0" || verboseMode == false){
+
+    waitUntil(PublishDelayFunction);
+    Particle.publish("Mode","Verbose Mode already OFF.", PRIVATE);
+    return 1;
+    }
+  
+  else {
       return 0;
     }
 }
@@ -240,17 +271,25 @@ void sendUBIDots()
   Particle.publish("Air-Quality-Hook",data,PRIVATE);
   publishTime = Time.minute();
   webhookTimeStamp = millis();
-  inTransit = false;
+  inTransit = true;
 }
 
 
 void UbidotsHandler(const char *event, const char *data){
-  int responseCode = 200;
+
+  char dataCopy[strlen(data)+1];                                      // data needs to be copied since if (Particle.connected()) Particle.publish() will clear it
+  strncpy(dataCopy, data, sizeof(dataCopy));                          // Copy - overflow safe
+  if (!strlen(dataCopy)) {                                            // First check to see if there is any data
+    Particle.publish("Ubidots Hook", "No Data", PRIVATE);
+    return;
+  }
+
+  int responseCode = atoi(dataCopy);  
+
  if ((responseCode == 200) || (responseCode == 201)){
    Particle.publish("STATE","Response Received",PRIVATE);
    inTransit =  false;
  }
-
-
-
+ 
+ else Particle.publish("ERROR!", dataCopy, PRIVATE); 
 }
