@@ -29,6 +29,7 @@
 // v1.08 - Fixed Verbose Mode, Cleaned Comments and Added State Transition Monitoring . 
 // v1.09 - Added UBIDots handler and Setup WebHooks.
 // v1.10 - Updated comment formatting and fixed the Ubidots reporting logic for temp change
+// v1.11 - Added UbiDots Response Handler
 
 
 const char releaseNumber[6] = "1.10";                       // Displays the release on the menu 
