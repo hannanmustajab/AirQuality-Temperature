@@ -65,8 +65,8 @@ const unsigned long webhookTimeout = 45000;                 // Timeperiod to wai
 unsigned long webhookTimeStamp = 0;                         // Webhooks timestamp.
 
 // Variables releated to the sensors 
-// bool SetVerboseMode(String command);                     // Function to Set verbose mode.     *** This is not needed with Particle
-bool verboseMode=true;                                      // Variable VerboseMode. 
+
+bool verboseMode;                                            // Variable VerboseMode. 
 float temperatureInC=0;                                     // Current Temp Reading global variable
 float voltage;                                              // Voltage level of the LiPo battery - 3.6-4.2V range
 bool inTransit = false;
@@ -95,6 +95,7 @@ void setup()
 
 void loop()
 {
+  
   switch (state)                                            // In the main loop, all code execution must take place in a defined state
   {
   case IDLE_STATE: // IDLE State.
@@ -220,6 +221,7 @@ bool getTemperature()
   { 
     temperatureInC = sensor.celsius();
     snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", temperatureInC); 
+    
   }
   if (abs(temperatureInC - lastTemperatureInC) >= 1) {
     lastTemperatureInC = temperatureInC;
@@ -232,7 +234,7 @@ bool getTemperature()
 bool SetVerboseMode(String command)
 {
 
-  if(command == "1")
+  if(command == "1" && verboseMode == false)
   {
     verboseMode = true;
     waitUntil(PublishDelayFunction);
@@ -240,31 +242,36 @@ bool SetVerboseMode(String command)
     return 1;
   }
 
-  else if(command == "1" || verboseMode == true)
+   if(command == "1" && verboseMode == true)
   {
     waitUntil(PublishDelayFunction);
     Particle.publish("Mode","Verbose Mode Already ON.", PRIVATE);
-    return 1;
+    return 0;
   }
 
-  else if (command == "0"){
+   if (command == "0" && verboseMode == true)
+  {
     verboseMode = false;
     waitUntil(PublishDelayFunction);
     Particle.publish("Mode","Verbose Mode Stopped.", PRIVATE);
     return 1;
-    }
+  }
   
-  else if (command == "0" || verboseMode == false){
-
+   if (command == "0" && verboseMode == false)
+  {
     waitUntil(PublishDelayFunction);
     Particle.publish("Mode","Verbose Mode already OFF.", PRIVATE);
-    return 1;
-    }
-  
-  else {
-      return 0;
-    }
+    return 0;
+  }
+
+  else 
+  {
+    return 0;
+  }
+
 }
+
+
 void sendUBIDots()
 {
   char data[256];
@@ -293,4 +300,5 @@ void UbidotsHandler(const char *event, const char *data){
  }
  
  else Particle.publish("ERROR!", dataCopy, PRIVATE); 
+
 }

@@ -35,6 +35,7 @@
 // v1.08 - Fixed Verbose Mode, Cleaned Comments and Added State Transition Monitoring . 
 // v1.09 - Added UBIDots handler and Setup WebHooks.
 // v1.10 - Updated comment formatting and fixed the Ubidots reporting logic for temp change
+// v1.11 - Added UbiDots Response Handler
 
 
 void setup();
@@ -47,7 +48,7 @@ bool getTemperature();
 bool SetVerboseMode(String command);
 void sendUBIDots();
 void UbidotsHandler(const char *event, const char *data);
-#line 34 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
+#line 35 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
 const char releaseNumber[6] = "1.10";                       // Displays the release on the menu 
 
 #include "DS18.h"                                           // Include the OneWire library
@@ -81,8 +82,8 @@ const unsigned long webhookTimeout = 45000;                 // Timeperiod to wai
 unsigned long webhookTimeStamp = 0;                         // Webhooks timestamp.
 
 // Variables releated to the sensors 
-// bool SetVerboseMode(String command);                     // Function to Set verbose mode.     *** This is not needed with Particle
-bool verboseMode=true;                                      // Variable VerboseMode. 
+
+bool verboseMode;                                            // Variable VerboseMode. 
 float temperatureInC=0;                                     // Current Temp Reading global variable
 float voltage;                                              // Voltage level of the LiPo battery - 3.6-4.2V range
 bool inTransit = false;
@@ -90,6 +91,14 @@ bool inTransit = false;
 
 void setup()
 {
+  // This part receives Response using Particle.subscribe() and tells the response received from Ubidots. 
+
+  char responseTopic[125];
+  String deviceID = System.deviceID();                            // Multiple Electrons share the same hook - keeps things straight
+  deviceID.toCharArray(responseTopic,125);
+  Particle.subscribe(responseTopic, UbidotsHandler, MY_DEVICES);  // Subscribe to the integration response event
+
+
   getTemperature();
   Particle.variable("celsius", temperatureString);          // Setup Particle Variable
   Particle.variable("Release", releaseNumber);              // So we can see what release is running from the console
@@ -103,6 +112,10 @@ void setup()
 
 void loop()
 {
+  if (sensor.read()){
+    Particle.publish("TESTING","RUNNING",PRIVATE);
+    }
+
   switch (state)                                            // In the main loop, all code execution must take place in a defined state
   {
   case IDLE_STATE: // IDLE State.
@@ -228,6 +241,7 @@ bool getTemperature()
   { 
     temperatureInC = sensor.celsius();
     snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", temperatureInC); 
+    
   }
   if (abs(temperatureInC - lastTemperatureInC) >= 1) {
     lastTemperatureInC = temperatureInC;
@@ -240,7 +254,7 @@ bool getTemperature()
 bool SetVerboseMode(String command)
 {
 
-  if(command == "1")
+  if(command == "1" && verboseMode == false)
   {
     verboseMode = true;
     waitUntil(PublishDelayFunction);
@@ -248,31 +262,36 @@ bool SetVerboseMode(String command)
     return 1;
   }
 
-  else if(command == "1" || verboseMode == true)
+   if(command == "1" && verboseMode == true)
   {
     waitUntil(PublishDelayFunction);
     Particle.publish("Mode","Verbose Mode Already ON.", PRIVATE);
-    return 1;
+    return 0;
   }
 
-  else if (command == "0"){
+   if (command == "0" && verboseMode == true)
+  {
     verboseMode = false;
     waitUntil(PublishDelayFunction);
     Particle.publish("Mode","Verbose Mode Stopped.", PRIVATE);
     return 1;
-    }
+  }
   
-  else if (command == "0" || verboseMode == false){
-
+   if (command == "0" && verboseMode == false)
+  {
     waitUntil(PublishDelayFunction);
     Particle.publish("Mode","Verbose Mode already OFF.", PRIVATE);
-    return 1;
-    }
-  
-  else {
-      return 0;
-    }
+    return 0;
+  }
+
+  else 
+  {
+    return 0;
+  }
+
 }
+
+
 void sendUBIDots()
 {
   char data[256];
@@ -301,4 +320,5 @@ void UbidotsHandler(const char *event, const char *data){
  }
  
  else Particle.publish("ERROR!", dataCopy, PRIVATE); 
+
 }
