@@ -14,6 +14,9 @@
           - Add a function that reads this response and published a message (if in verboseMode) that the data was received by Ubidots
           - Add a new state (RESPONSE_WAIT) that will look for the response from Ubidots and timeout if 45 seconds pass - going to an ERROR_STATE
           - Add a new state (ERROR_STATE) which will reset the Argon after 30 seconds
+      4) In reporting state, why two If conditionals?
+      5) In response wait state, where is the state transition message?
+      6) In ERROR state, publish that resetting in 30 secs, then delay 30 secs and reset the device.
  */
 
 
