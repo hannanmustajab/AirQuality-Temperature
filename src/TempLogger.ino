@@ -17,6 +17,7 @@
       4) In reporting state, why two If conditionals?
       5) In response wait state, where is the state transition message?
       6) In ERROR state, publish that resetting in 30 secs, then delay 30 secs and reset the device.
+      7) Add a Particle.function() that will enable you to force a measurement then change the measuring frequency to 15 mins.
  */
 
 
