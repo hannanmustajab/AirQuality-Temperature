@@ -60,9 +60,10 @@ char batteryString[16];                                     // Battery value for
 // Variables Related To Update and Refresh Rates. 
 unsigned long updateRate = 5000;                            // Define Update Rate
 static unsigned long refreshRate = 1;                       // Time period for IDLE state. 
-static unsigned long publishTime =1;                        // Timestamp for Ubidots publish
+static unsigned long publishTime =0;                        // Timestamp for Ubidots publish
 const unsigned long webhookTimeout = 45000;                 // Timeperiod to wait for a response from Ubidots before going to error State.
 unsigned long webhookTimeStamp = 0;                         // Webhooks timestamp.
+unsigned long publishTimeHour=0;
 
 // Variables releated to the sensors 
 
@@ -121,7 +122,7 @@ void loop()
         } 
     }
     
-    else if((Time.minute() - publishTime ) >= (60))        // Check if 60 minutes or 1 hr has passed. 
+    else if(Time.hour() != publishTimeHour)        // Check if 60 minutes or 1 hr has passed. 
     {                      
       state = REPORTING_STATE;
         if(verboseMode){
@@ -139,24 +140,22 @@ void loop()
     break;
 
   case REPORTING_STATE: //
-    
+    if (Time.hour() == 12) Particle.syncTime();                             // SET CLOCK EACH DAY AT 12 NOON.
     if(verboseMode)
-    {
+    { 
       Particle.publish("Temperature", temperatureString, PRIVATE); 
     } 
-    sendUBIDots();
-    state = RESPONSE_WAIT;
-    
-  if (verboseMode)
+    if (verboseMode)
     {
       waitUntil(PublishDelayFunction);
       Particle.publish("State","Waiting RESPONSE",PRIVATE);
     }
-     
-      
-    else state = ERROR_STATE;
-      
-    break;
+    sendUBIDots();
+    state = RESPONSE_WAIT;
+    
+  
+
+      break;
 
   case RESPONSE_WAIT:     
   
@@ -278,27 +277,25 @@ void sendUBIDots()
   snprintf(data,sizeof(data),"{\"Temperature\":%3.1f, \"Battery\":%3.1f}",temperatureInC, voltage);
   Particle.publish("Air-Quality-Hook",data,PRIVATE);
   publishTime = Time.minute();
+  publishTimeHour = Time.hour();
   webhookTimeStamp = millis();
   inTransit = true;
+
 }
 
 
-void UbidotsHandler(const char *event, const char *data){
-
-  char dataCopy[strlen(data)+1];                                      // data needs to be copied since if (Particle.connected()) Particle.publish() will clear it
-  strncpy(dataCopy, data, sizeof(dataCopy));                          // Copy - overflow safe
-  if (!strlen(dataCopy)) {                                            // First check to see if there is any data
-    Particle.publish("Ubidots Hook", "No Data", PRIVATE);
+void UbidotsHandler(const char *event, const char *data)  // Looks at the response from Ubidots - Will reset Photon if no successful response
+{
+  // Response Template: "{{hourly.0.status_code}}"
+  if (!data) {                                            // First check to see if there is any data
+    Particle.publish("Ubidots Hook", "No Data",PRIVATE);
     return;
   }
-
-  int responseCode = atoi(dataCopy);  
-
- if ((responseCode == 200) || (responseCode == 201)){
-   Particle.publish("STATE","Response Received",PRIVATE);
-   inTransit =  false;
- }
- 
- else Particle.publish("ERROR!", dataCopy, PRIVATE); 
-
+  int responseCode = atoi(data);                          // Response is only a single number thanks to Template
+  if ((responseCode == 200) || (responseCode == 201))
+  {
+    Particle.publish("State","Response Received",PRIVATE);
+    inTransit = false;                                 // Data has been received
+  }
+  else Particle.publish("Ubidots Hook", data,PRIVATE);             // Publish the response code
 }
