@@ -11,6 +11,8 @@
  * Date:
  */
 
+
+
 /* 
       ***  Next Steps ***
       1) Add more comments in your code - helps in sharing with others and remembering why you did something 6 months from now
@@ -20,6 +22,10 @@
           - Add a function that reads this response and published a message (if in verboseMode) that the data was received by Ubidots
           - Add a new state (RESPONSE_WAIT) that will look for the response from Ubidots and timeout if 45 seconds pass - going to an ERROR_STATE
           - Add a new state (ERROR_STATE) which will reset the Argon after 30 seconds
+      4) In reporting state, why two If conditionals?
+      5) In response wait state, where is the state transition message?
+      6) In ERROR state, publish that resetting in 30 secs, then delay 30 secs and reset the device.
+      7) Add a Particle.function() that will enable you to force a measurement then change the measuring frequency to 15 mins.
  */
 
 
@@ -48,7 +54,9 @@ bool getTemperature();
 bool SetVerboseMode(String command);
 void sendUBIDots();
 void UbidotsHandler(const char *event, const char *data);
-#line 35 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
+void transitionState(void);
+bool forcedReading(String Command);
+#line 41 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
 const char releaseNumber[6] = "1.10";                       // Displays the release on the menu 
 
 #include "DS18.h"                                           // Include the OneWire library
@@ -67,7 +75,9 @@ enum State
   RESPONSE_WAIT,
   ERROR_STATE
 };                                                          // These are the allowed states in the main loop
+char stateNames[8][44] = {"Initial State","IDLE_STATE","REPORTING_STATE","RESPONSE_WAIT","ERROR STATE"};
 State state = INITIALIZATION_STATE;                         // Initialize the state variable
+State oldState = INITIALIZATION_STATE;                     //Initialize the oldState Variable
 
 // Variables Related To Particle Mobile Application Reporting
 char signalString[16];                                      // Used to communicate Wireless RSSI and Description
@@ -87,7 +97,7 @@ unsigned long publishTimeHour=0;
 bool verboseMode;                                            // Variable VerboseMode. 
 float temperatureInC=0;                                     // Current Temp Reading global variable
 float voltage;                                              // Voltage level of the LiPo battery - 3.6-4.2V range
-bool inTransit = false;
+bool inTransit = false;                                     // This variable is used to check if the data is inTransit to Ubidots or not. If inTransit is false, Then data is succesfully sent.  
 
 
 void setup()
@@ -101,11 +111,20 @@ void setup()
 
 
   getTemperature();
+
+  // Particle Variables 
+  
   Particle.variable("celsius", temperatureString);          // Setup Particle Variable
   Particle.variable("Release", releaseNumber);              // So we can see what release is running from the console
   Particle.variable("Signal", signalString);                // Particle variables that enable monitoring using the mobile app
   Particle.variable("Battery", batteryString);              // Battery level in V as the Argon does not have a fuel cell
+  
+  
+  
+  // Particle Functions.
+  
   Particle.function("verboseMode", SetVerboseMode);         // Added Particle Function For VerboseMode. 
+  Particle.function("GetReading",forcedReading);            // This function will force it to get a reading and set the refresh rate to 15mins. 
   if (verboseMode) Particle.publish("State","IDLE", PRIVATE);
   
   state = IDLE_STATE;                                       // If we made it this far, we are ready to go to IDLE in the main loop
@@ -117,19 +136,22 @@ void loop()
   switch (state)                                            // In the main loop, all code execution must take place in a defined state
   {
   case IDLE_STATE: // IDLE State.
+    if (verboseMode && oldState != state) transitionState();  // If verboseMode is on and state is changed, Then publish the state transition.
     static unsigned long TimePassed = 0;        
     if (Time.minute() - TimePassed >= refreshRate ) 
     {
     state = MEASURING_STATE;
     TimePassed = Time.minute();     
-    if(verboseMode){
-      waitUntil(PublishDelayFunction);
-      Particle.publish("State","MEASURING",PRIVATE);
-      }              
+    // if(verboseMode){
+    //   waitUntil(PublishDelayFunction);
+    //   Particle.publish("State","MEASURING",PRIVATE);
+    //   }              
     }
   break;
 
-  case MEASURING_STATE:                                    // Measuring State. 
+  case MEASURING_STATE:    
+    if (verboseMode && oldState != state) transitionState();  // If verboseMode is on and state is changed, Then publish the state transition.
+                                // Measuring State. 
     if (getMeasurements()) {                               // Get Measurements and Move to Reporting State if there is a change
       state = REPORTING_STATE;
        if(verboseMode)
@@ -156,38 +178,43 @@ void loop()
     }
     break;
 
-  case REPORTING_STATE: //
+  case REPORTING_STATE: 
+    
+    if (verboseMode && oldState != state) transitionState();                // If verboseMode is on and state is changed, Then publish the state transition.
+
     if (Time.hour() == 12) Particle.syncTime();                             // SET CLOCK EACH DAY AT 12 NOON.
     if(verboseMode)
     { 
-      Particle.publish("Temperature", temperatureString, PRIVATE); 
-    } 
-    if (verboseMode)
-    {
       waitUntil(PublishDelayFunction);
+      Particle.publish("Temperature", temperatureString, PRIVATE); 
       Particle.publish("State","Waiting RESPONSE",PRIVATE);
-    }
+    } 
     sendUBIDots();
     state = RESPONSE_WAIT;
-    
   
-
-      break;
+    break;
 
   case RESPONSE_WAIT:     
+
+    if (verboseMode && oldState != state) transitionState();  // If verboseMode is on and state is changed, Then publish the state transition.
+
   
     if (!inTransit){
-        
+     Particle.publish("STATE","Data Received, Going to IDLE");            // If data is not inTransit, Then data was sent succesfully, Hence go to Idle State.
      state = IDLE_STATE;
     }                                                                     // This checks for the response from UBIDOTS. 
-    if(millis() - webhookTimeStamp > webhookTimeout ){
+    
+    if(millis() - webhookTimeStamp > webhookTimeout ){                    // If device does not respond in 45 Seconds, Then Reset it. 
       Particle.publish("spark/device/session/end", "", PRIVATE);          //
       state = ERROR_STATE;                                                // time out
     }
   break;
 
-  case ERROR_STATE:                                                       // This state RESETS the devices. 
-  state = IDLE_STATE;
+  case ERROR_STATE:   
+                                                        // This state RESETS the devices. 
+    Particle.publish("STATE","RESETTING IN 30 SEC. ",PRIVATE);
+
+    state = IDLE_STATE;
   break;
   }
 }
@@ -304,15 +331,35 @@ void sendUBIDots()
 void UbidotsHandler(const char *event, const char *data)  // Looks at the response from Ubidots - Will reset Photon if no successful response
 {
   // Response Template: "{{hourly.0.status_code}}"
-  if (!data) {                                            // First check to see if there is any data
+  if (!data) {                                                    // First check to see if there is any data
     Particle.publish("Ubidots Hook", "No Data",PRIVATE);
     return;
   }
-  int responseCode = atoi(data);                          // Response is only a single number thanks to Template
+  int responseCode = atoi(data);                                  // Response is only a single number thanks to Template
   if ((responseCode == 200) || (responseCode == 201))
   {
     Particle.publish("State","Response Received",PRIVATE);
-    inTransit = false;                                 // Data has been received
+    inTransit = false;                                             // Data has been received
   }
   else Particle.publish("Ubidots Hook", data,PRIVATE);             // Publish the response code
+}
+
+
+void transitionState(void){                                       // This function publishes change of state. 
+  char stateTransitionString[64];                                  // Declare a String to show state transition.
+  snprintf(stateTransitionString,sizeof(stateTransitionString),"Transition: %s to %s", stateNames[oldState],stateNames[state]);
+  oldState = state;
+  Particle.publish("State",stateTransitionString,PRIVATE);
+}
+
+bool forcedReading(String Command){
+
+  if(Command == "1")
+  {
+    state = REPORTING_STATE;
+    refreshRate = 15;
+    Particle.publish("STATE","Getting Value, Next Reading in 15 Mins.");
+    return 1;
+  }
+  else return 0;
 }
