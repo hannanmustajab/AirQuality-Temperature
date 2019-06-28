@@ -9,17 +9,27 @@
 
 /* 
       ***  Next Steps ***
-      1) Add more comments in your code - helps in sharing with others and remembering why you did something 6 months from now
-      2) Need to report every hour - even if the temperature has not changed.  
-      3) Next, we need to complete the reporting loop to Ubidots.  You will get a response when you send a webhook to Ubidots.
+      Good 1) Add more comments in your code - helps in sharing with others and remembering why you did something 6 months from now
+      Not Complete 2) Need to report every hour - even if the temperature has not changed.  
+      Good 3) Next, we need to complete the reporting loop to Ubidots.  You will get a response when you send a webhook to Ubidots.
           - Check that this repose is "201" which is defined using the response template in your WebHook
           - Add a function that reads this response and published a message (if in verboseMode) that the data was received by Ubidots
           - Add a new state (RESPONSE_WAIT) that will look for the response from Ubidots and timeout if 45 seconds pass - going to an ERROR_STATE
           - Add a new state (ERROR_STATE) which will reset the Argon after 30 seconds
-      4) In reporting state, why two If conditionals?
-      5) In response wait state, where is the state transition message?
-      6) In ERROR state, publish that resetting in 30 secs, then delay 30 secs and reset the device.
-      7) Add a Particle.function() that will enable you to force a measurement then change the measuring frequency to 15 mins.
+      Good 4) In reporting state, why two If conditionals?
+      Good 5) In response wait state, where is the state transition message?
+      Not Complete 6) In ERROR state, publish that resetting in 30 secs, then delay 30 secs and reset the device.
+      Good 7) Add a Particle.function() that will enable you to force a measurement then change the measuring frequency to 15 mins.
+      8) Adaptive sampling - I have an idea that could be interesting.  I have not yet implemented this on my sensors so, something new
+      Adaptive sampling rate ( we will do this on temp for now).   Here is the PublishDelayFunction
+        - Have a base rate of sampling - say every 15 minutes
+        - Only report to Ubidots if there is a change greater than x
+        - However, if there is a change of y  (where y > x) then we start sampling ever 5 minutes 
+        - We only report to Ubidots if there is a chance greater than x
+        - Once we have a period where the change is z (z < x), we go back to sampling every 15 minutes
+        - Even if there is no change, we report at least every hour
+      Think of this use case.  If we are sampling air quality, imagine sampling at a slower rate but, when there is a sudden change, 
+      such as during rush hour, we take more frequent samples and show to less frequent samples when there is less change.
  */
 
 
@@ -36,6 +46,7 @@
 // v1.09 - Added UBIDots handler and Setup WebHooks.
 // v1.10 - Updated comment formatting and fixed the Ubidots reporting logic for temp change
 // v1.11 - Added UbiDots Response Handler
+// v1.11 - Cleaned up the code a small bit and added new tasks
 
 
 const char releaseNumber[6] = "1.10";                       // Displays the release on the menu 
@@ -160,7 +171,6 @@ void loop()
     break;
 
   case REPORTING_STATE: 
-    
     if (verboseMode && oldState != state) transitionState();                // If verboseMode is on and state is changed, Then publish the state transition.
 
     if (Time.hour() == 12) Particle.syncTime();                             // SET CLOCK EACH DAY AT 12 NOON.
@@ -176,7 +186,6 @@ void loop()
     break;
 
   case RESPONSE_WAIT:     
-
     if (verboseMode && oldState != state) transitionState();  // If verboseMode is on and state is changed, Then publish the state transition.
 
   
@@ -191,12 +200,12 @@ void loop()
     }
   break;
 
-  case ERROR_STATE:   
-                                                        // This state RESETS the devices. 
+  case ERROR_STATE:                                                       // This state RESETS the devices. 
+    if (verboseMode && oldState != state) transitionState();  // If verboseMode is on and state is changed, Then publish the state transition.
     Particle.publish("STATE","RESETTING IN 30 SEC. ",PRIVATE);
-
     state = IDLE_STATE;
   break;
+  
   }
 }
 
