@@ -57,7 +57,6 @@ void getSignalStrength();
 void getBatteryCharge();
 bool getMeasurements();
 bool getTemperature();
-bool adaptiveMode();
 bool SetVerboseMode(String command);
 void sendUBIDots();
 void UbidotsHandler(const char *event, const char *data);
@@ -80,7 +79,8 @@ enum State
   REPORTING_STATE,
   RESPONSE_WAIT,
   ERROR_STATE
-}; // These are the allowed states in the main loop
+};
+// These are the allowed states in the main loop
 char stateNames[8][44] = {"Initial State", "IDLE_STATE", "REPORTING_STATE", "RESPONSE_WAIT", "ERROR STATE"};
 State state = INITIALIZATION_STATE;    // Initialize the state variable
 State oldState = INITIALIZATION_STATE; //Initialize the oldState Variable
@@ -97,6 +97,8 @@ static unsigned long publishTime = 0;       // Timestamp for Ubidots publish
 const unsigned long webhookTimeout = 45000; // Timeperiod to wait for a response from Ubidots before going to error State.
 unsigned long webhookTimeStamp = 0;         // Webhooks timestamp.
 unsigned long publishTimeHour = 0;
+static unsigned long forcedReadingRate = 1; // This variable will be the timeperiod of Forced Reading Function.
+
 static unsigned long baseChangeTemp = 1;     // Temperature change for the base sampling rate
 static unsigned long limitingChangeTemp = 2; // Limiting Temperature change for the sampling rate
 
@@ -106,7 +108,7 @@ bool verboseMode;         // Variable VerboseMode.
 float temperatureInC = 0; // Current Temp Reading global variable
 float voltage;            // Voltage level of the LiPo battery - 3.6-4.2V range
 bool inTransit = false;   // This variable is used to check if the data is inTransit to Ubidots or not. If inTransit is false, Then data is succesfully sent.
-
+bool forcedMode = false;  //Forced value mode.
 void setup()
 {
   // This part receives Response using Particle.subscribe() and tells the response received from Ubidots.
@@ -148,17 +150,16 @@ void loop()
     {
       state = MEASURING_STATE;
       TimePassed = Time.minute();
-      // if(verboseMode){
-      //   waitUntil(PublishDelayFunction);
-      //   Particle.publish("State","MEASURING",PRIVATE);
-      //   }
     }
     break;
 
   case MEASURING_STATE:
+
+    static unsigned long ForcedValueTimePassed = 0;
     if (verboseMode && oldState != state)
-      transitionState(); // If verboseMode is on and state is changed, Then publish the state transition.
-                         // Measuring State.
+      transitionState();
+    // If verboseMode is on and state is changed, Then publish the state transition.
+    // Measuring State.
     if (getMeasurements())
     { // Get Measurements and Move to Reporting State if there is a change
       state = REPORTING_STATE;
@@ -178,15 +179,22 @@ void loop()
         Particle.publish("State", "Time Passed - Reporting", PRIVATE); //Tells us that One Hour has passed.
       }
     }
-    else if (adaptiveMode)
+
+    // Forced Reading
+    /* When the forced reading function is called,  */
+    else if ((forcedMode) && (Time.minute() - ForcedValueTimePassed > forcedReadingRate))
     {
+
       state = REPORTING_STATE;
+      ForcedValueTimePassed = Time.minute();
+
       if (verboseMode)
       {
         waitUntil(PublishDelayFunction);
-        Particle.publish("State", "ADAPTIVE", PRIVATE);
+        Particle.publish("FORCED", "GETTING READING", PRIVATE);
       }
     }
+
     else
     {
       state = IDLE_STATE;
@@ -297,25 +305,6 @@ bool getTemperature()
     return 0;
 }
 
-bool adaptiveMode()
-{
-
-  static float lastTemperatureInC = 0;
-  if (sensor.read())
-  {
-    temperatureInC = sensor.celsius();
-  }
-  if (abs(temperatureInC - lastTemperatureInC) > limitingChangeTemp)
-  {
-    Particle.publish("INFO", "ADAPTIVE MODE ON", PRIVATE);
-    lastTemperatureInC = temperatureInC;
-    refreshRate = 1;
-    return 1;
-  }
-  else
-    return 0;
-}
-
 // Function to Toggle VerboseMode.
 bool SetVerboseMode(String command)
 {
@@ -399,7 +388,8 @@ bool forcedReading(String Command)
   if (Command == "1")
   {
     state = REPORTING_STATE;
-    refreshRate = 15;
+    forcedReadingRate = 5;
+    forcedMode = true;
     Particle.publish("STATE", "Getting Value, Next Reading in 15 Mins.");
     return 1;
   }
