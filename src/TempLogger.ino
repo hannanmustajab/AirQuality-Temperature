@@ -8,7 +8,7 @@
 /* 
       ***  Next Steps ***
       Good 1) Add more comments in your code - helps in sharing with others and remembering why you did something 6 months from now
-      Good 2) Need to report every hour - even if the temperature has not changed.  
+      Not Complete 2) Need to report every hour - even if the temperature has not changed.  
       Good 3) Next, we need to complete the reporting loop to Ubidots.  You will get a response when you send a webhook to Ubidots.
           - Check that this repose is "201" which is defined using the response template in your WebHook
           - Add a function that reads this response and published a message (if in verboseMode) that the data was received by Ubidots
@@ -18,7 +18,7 @@
       Good 5) In response wait state, where is the state transition message?
       Not Complete 6) In ERROR state, publish that resetting in 30 secs, then delay 30 secs and reset the device.
       Good 7) Add a Particle.function() that will enable you to force a measurement then change the measuring frequency to 15 mins.
-      Not yet 8) Adaptive sampling - I have an idea that could be interesting.  I have not yet implemented this on my sensors so, something new
+      8) Adaptive sampling - I have an idea that could be interesting.  I have not yet implemented this on my sensors so, something new
       Adaptive sampling rate ( we will do this on temp for now).   Here is the PublishDelayFunction
         - Have a base rate of sampling - say every 15 minutes
         - Only report to Ubidots if there is a change greater than x
@@ -28,9 +28,6 @@
         - Even if there is no change, we report at least every hour
       Think of this use case.  If we are sampling air quality, imagine sampling at a slower rate but, when there is a sudden change, 
       such as during rush hour, we take more frequent samples and show to less frequent samples when there is less change.
-      9) Move the Particle.functions and Particle.variables to the top of the Setup() as they must complete in the first 30 seconds
-      10) Look at your Particle.publish lines - can eliminate some as redundant (Setup and Adaptive).
-      
  */
 
 // v1.00 - Got the metering working, tested with sensor - viable code
@@ -81,11 +78,12 @@ static unsigned long refreshRate = 1;       // Time period for IDLE state.
 static unsigned long publishTime = 0;       // Timestamp for Ubidots publish
 const unsigned long webhookTimeout = 45000; // Timeperiod to wait for a response from Ubidots before going to error State.
 unsigned long webhookTimeStamp = 0;         // Webhooks timestamp.
-unsigned long publishTimeHour = 0;
-static unsigned long forcedReadingRate = 1; // This variable will be the timeperiod of Forced Reading Function.
+signed long publishTimeHour = 0;
+static unsigned long forcedReadingRate = 1;   // Interval for the data in Forced Reading Mode.
+static unsigned long adaptiveReadingRate = 5; // Interval for adaptive measuring state.
 
-static unsigned long baseChangeTemp = 1;     // Temperature change for the base sampling rate
-static unsigned long limitingChangeTemp = 2; // Limiting Temperature change for the sampling rate
+// static unsigned long baseChangeTemp = 1;     // Temperature change for the base sampling rate
+// static unsigned long limitingChangeTemp = 2; // Limiting Temperature change for the sampling rate
 
 // Variables releated to the sensors
 
@@ -94,6 +92,8 @@ float temperatureInC = 0; // Current Temp Reading global variable
 float voltage;            // Voltage level of the LiPo battery - 3.6-4.2V range
 bool inTransit = false;   // This variable is used to check if the data is inTransit to Ubidots or not. If inTransit is false, Then data is succesfully sent.
 bool forcedMode = false;  //Forced value mode.
+bool adaptiveModeOn;      // Variable to check if Adaptive mode is on or off.
+
 void setup()
 {
   // This part receives Response using Particle.subscribe() and tells the response received from Ubidots.
@@ -104,6 +104,7 @@ void setup()
   Particle.subscribe(responseTopic, UbidotsHandler, MY_DEVICES); // Subscribe to the integration response event
 
   getTemperature();
+  adaptiveMode();
 
   // Particle Variables
 
@@ -116,8 +117,6 @@ void setup()
 
   Particle.function("verboseMode", SetVerboseMode); // Added Particle Function For VerboseMode.
   Particle.function("GetReading", forcedReading);   // This function will force it to get a reading and set the refresh rate to 15mins.
-  
-  
   if (verboseMode)
     Particle.publish("State", "IDLE", PRIVATE);
 
@@ -128,6 +127,7 @@ void loop()
 {
 
   switch (state) // In the main loop, all code execution must take place in a defined state
+
   {
   case IDLE_STATE: // IDLE State.
     if (verboseMode && oldState != state)
@@ -143,9 +143,11 @@ void loop()
   case MEASURING_STATE:
 
     static unsigned long ForcedValueTimePassed = 0;
+    static unsigned long adaptiveValueTimePassed = 0;
+
     if (verboseMode && oldState != state)
-      transitionState();
-    // If verboseMode is on and state is changed, Then publish the state transition.
+      transitionState(); // If verboseMode is on and state is changed, Then publish the state transition.
+
     // Measuring State.
     if (getMeasurements())
     { // Get Measurements and Move to Reporting State if there is a change
@@ -179,6 +181,19 @@ void loop()
       {
         waitUntil(PublishDelayFunction);
         Particle.publish("FORCED", "GETTING READING", PRIVATE);
+      }
+    }
+
+    // AdaptiveMode
+    else if ((adaptiveModeOn) && (Time.minute() - adaptiveValueTimePassed > adaptiveReadingRate)) // Checks if adaptiveMode is ON and 5 minutes have passed from the last value.
+    {
+      state = REPORTING_STATE;
+      adaptiveValueTimePassed = Time.minute();
+
+      if (verboseMode)
+      {
+        waitUntil(PublishDelayFunction);
+        Particle.publish("ADAPTIVE ON", "Next value in 5 minutes", PRIVATE);
       }
     }
 
@@ -390,4 +405,21 @@ bool forcedReading(String Command)
     return 0;
   }
   return 0;
+}
+
+// Adaptive Mode Function
+
+bool adaptiveMode()
+{
+  if ((Time.hour() == 5) || (Time.hour() == 6) || (Time.hour() == 0) || (Time.hour() == 1))
+  {
+    adaptiveModeOn = true;
+    return 1;
+  }
+
+  else
+  {
+    adaptiveModeOn = false;
+    return 0;
+  }
 }

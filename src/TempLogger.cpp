@@ -48,7 +48,8 @@
 // v1.09 - Added UBIDots handler and Setup WebHooks.
 // v1.10 - Updated comment formatting and fixed the Ubidots reporting logic for temp change
 // v1.11 - Added UbiDots Response Handler
-// v1.11 - Cleaned up the code a small bit and added new tasks
+// v1.12 - Cleaned up the code a small bit and added new tasks
+// v1.13 - Rewritten the Forced Reading Function.
 
 void setup();
 void loop();
@@ -62,8 +63,9 @@ void sendUBIDots();
 void UbidotsHandler(const char *event, const char *data);
 void transitionState(void);
 bool forcedReading(String Command);
-#line 47 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
-const char releaseNumber[6] = "1.10"; // Displays the release on the menu
+bool adaptiveMode();
+#line 48 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
+const char releaseNumber[6] = "1.13"; // Displays the release on the menu
 
 #include "DS18.h" // Include the OneWire library
 
@@ -96,11 +98,12 @@ static unsigned long refreshRate = 1;       // Time period for IDLE state.
 static unsigned long publishTime = 0;       // Timestamp for Ubidots publish
 const unsigned long webhookTimeout = 45000; // Timeperiod to wait for a response from Ubidots before going to error State.
 unsigned long webhookTimeStamp = 0;         // Webhooks timestamp.
-unsigned long publishTimeHour = 0;
-static unsigned long forcedReadingRate = 1; // This variable will be the timeperiod of Forced Reading Function.
+signed long publishTimeHour = 0;
+static unsigned long forcedReadingRate = 1;   // Interval for the data in Forced Reading Mode.
+static unsigned long adaptiveReadingRate = 5; // Interval for adaptive measuring state.
 
-static unsigned long baseChangeTemp = 1;     // Temperature change for the base sampling rate
-static unsigned long limitingChangeTemp = 2; // Limiting Temperature change for the sampling rate
+// static unsigned long baseChangeTemp = 1;     // Temperature change for the base sampling rate
+// static unsigned long limitingChangeTemp = 2; // Limiting Temperature change for the sampling rate
 
 // Variables releated to the sensors
 
@@ -109,6 +112,8 @@ float temperatureInC = 0; // Current Temp Reading global variable
 float voltage;            // Voltage level of the LiPo battery - 3.6-4.2V range
 bool inTransit = false;   // This variable is used to check if the data is inTransit to Ubidots or not. If inTransit is false, Then data is succesfully sent.
 bool forcedMode = false;  //Forced value mode.
+bool adaptiveModeOn;      // Variable to check if Adaptive mode is on or off.
+
 void setup()
 {
   // This part receives Response using Particle.subscribe() and tells the response received from Ubidots.
@@ -119,6 +124,7 @@ void setup()
   Particle.subscribe(responseTopic, UbidotsHandler, MY_DEVICES); // Subscribe to the integration response event
 
   getTemperature();
+  adaptiveMode();
 
   // Particle Variables
 
@@ -141,6 +147,7 @@ void loop()
 {
 
   switch (state) // In the main loop, all code execution must take place in a defined state
+
   {
   case IDLE_STATE: // IDLE State.
     if (verboseMode && oldState != state)
@@ -156,9 +163,11 @@ void loop()
   case MEASURING_STATE:
 
     static unsigned long ForcedValueTimePassed = 0;
+    static unsigned long adaptiveValueTimePassed = 0;
+
     if (verboseMode && oldState != state)
-      transitionState();
-    // If verboseMode is on and state is changed, Then publish the state transition.
+      transitionState(); // If verboseMode is on and state is changed, Then publish the state transition.
+
     // Measuring State.
     if (getMeasurements())
     { // Get Measurements and Move to Reporting State if there is a change
@@ -181,7 +190,7 @@ void loop()
     }
 
     // Forced Reading
-    /* When the forced reading function is called,  */
+    /* When the forced reading function is called, it checks if it is turned ON. Then if it is turned ON and 5 minutes have passed, It sends data to the UBIDots cloud by moving to the reporting state.  */
     else if ((forcedMode) && (Time.minute() - ForcedValueTimePassed > forcedReadingRate))
     {
 
@@ -192,6 +201,19 @@ void loop()
       {
         waitUntil(PublishDelayFunction);
         Particle.publish("FORCED", "GETTING READING", PRIVATE);
+      }
+    }
+
+    // AdaptiveMode
+    else if ((adaptiveModeOn) && (Time.minute() - adaptiveValueTimePassed > adaptiveReadingRate)) // Checks if adaptiveMode is ON and 5 minutes have passed from the last value.
+    {
+      state = REPORTING_STATE;
+      adaptiveValueTimePassed = Time.minute();
+
+      if (verboseMode)
+      {
+        waitUntil(PublishDelayFunction);
+        Particle.publish("ADAPTIVE ON", "Next value in 5 minutes", PRIVATE);
       }
     }
 
@@ -382,6 +404,9 @@ void transitionState(void)
   Particle.publish("State", stateTransitionString, PRIVATE);
 }
 
+/* The forced Reading function takes in two arguments,
+ If it is "1" then it turns the 
+ forcedMode to true and sets a rate of 5 mins.  */
 bool forcedReading(String Command)
 {
 
@@ -393,6 +418,28 @@ bool forcedReading(String Command)
     Particle.publish("STATE", "Getting Value, Next Reading in 15 Mins.");
     return 1;
   }
-  else
+
+  else if (Command == "0")
+  {
+    forcedMode = false;
     return 0;
+  }
+  return 0;
+}
+
+// Adaptive Mode Function
+
+bool adaptiveMode()
+{
+  if ((Time.hour() == 5) || (Time.hour() == 6) || (Time.hour() == 0) || (Time.hour() == 1))
+  {
+    adaptiveModeOn = true;
+    return 1;
+  }
+
+  else
+  {
+    adaptiveModeOn = false;
+    return 0;
+  }
 }
