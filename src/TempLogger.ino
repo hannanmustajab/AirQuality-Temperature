@@ -142,24 +142,23 @@ void loop()
 
   case MEASURING_STATE:
 
-    static unsigned long ForcedValueTimePassed = 0;
-    static unsigned long adaptiveValueTimePassed = 0;
+    // static unsigned long ForcedValueTimePassed = 0;
+    // static unsigned long adaptiveValueTimePassed = 0;
 
     if (verboseMode && oldState != state)
       transitionState(); // If verboseMode is on and state is changed, Then publish the state transition.
 
     // Measuring State.
-    if (getMeasurements())
-    { // Get Measurements and Move to Reporting State if there is a change
-      state = REPORTING_STATE;
-      if (verboseMode)
-      {
-        waitUntil(PublishDelayFunction);
-        Particle.publish("State", "Change detected - Reporting", PRIVATE);
-      }
+    getMeasurements(); // Get Measurements and Move to Reporting State if there is a change
+    state = REPORTING_STATE;
+
+    if (verboseMode)
+    {
+      waitUntil(PublishDelayFunction);
+      Particle.publish("State", "Change detected - Reporting", PRIVATE);
     }
 
-    else if (Time.hour() != publishTimeHour) // Check if 60 minutes or 1 hr has passed.
+    if (Time.hour() != publishTimeHour) // Check if 60 minutes or 1 hr has passed.
     {
       state = REPORTING_STATE;
       if (verboseMode)
@@ -169,33 +168,18 @@ void loop()
       }
     }
 
-    // Forced Reading
-    /* When the forced reading function is called, it checks if it is turned ON. Then if it is turned ON and 5 minutes have passed, It sends data to the UBIDots cloud by moving to the reporting state.  */
-    else if ((forcedMode) && (Time.minute() - ForcedValueTimePassed > forcedReadingRate))
-    {
+    // // AdaptiveMode
+    // if ((adaptiveModeOn) && (Time.minute() - adaptiveValueTimePassed > adaptiveReadingRate)) // Checks if adaptiveMode is ON and 5 minutes have passed from the last value.
+    // {
+    //   state = REPORTING_STATE;
+    //   adaptiveValueTimePassed = Time.minute();
 
-      state = REPORTING_STATE;
-      ForcedValueTimePassed = Time.minute();
-
-      if (verboseMode)
-      {
-        waitUntil(PublishDelayFunction);
-        Particle.publish("FORCED", "GETTING READING", PRIVATE);
-      }
-    }
-
-    // AdaptiveMode
-    else if ((adaptiveModeOn) && (Time.minute() - adaptiveValueTimePassed > adaptiveReadingRate)) // Checks if adaptiveMode is ON and 5 minutes have passed from the last value.
-    {
-      state = REPORTING_STATE;
-      adaptiveValueTimePassed = Time.minute();
-
-      if (verboseMode)
-      {
-        waitUntil(PublishDelayFunction);
-        Particle.publish("ADAPTIVE ON", "Next value in 5 minutes", PRIVATE);
-      }
-    }
+    //   if (verboseMode)
+    //   {
+    //     waitUntil(PublishDelayFunction);
+    //     Particle.publish("ADAPTIVE ON", "Next value in 5 minutes", PRIVATE);
+    //   }
+    // }
 
     else
     {
@@ -392,7 +376,7 @@ bool forcedReading(String Command)
 
   if (Command == "1")
   {
-    state = REPORTING_STATE;
+    state = MEASURING_STATE;
     forcedReadingRate = 5;
     forcedMode = true;
     Particle.publish("STATE", "Getting Value, Next Reading in 15 Mins.");
