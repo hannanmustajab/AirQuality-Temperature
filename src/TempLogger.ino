@@ -58,12 +58,13 @@ enum State
   INITIALIZATION_STATE,
   IDLE_STATE,
   MEASURING_STATE,
+  REPORTING_DETERMINATION,
   REPORTING_STATE,
   RESPONSE_WAIT,
   ERROR_STATE
 };
 // These are the allowed states in the main loop
-char stateNames[8][44] = {"Initial State", "IDLE_STATE", "REPORTING_STATE", "RESPONSE_WAIT", "ERROR STATE"};
+char stateNames[7][44] = {"Initial State", "Idle State", "Measuring", "Reporting Determination", "Reporting", "Response Wait", "Error Wait"};
 State state = INITIALIZATION_STATE;    // Initialize the state variable
 State oldState = INITIALIZATION_STATE; //Initialize the oldState Variable
 
@@ -74,7 +75,7 @@ char batteryString[16];     // Battery value for reporting
 
 // Variables Related To Update and Refresh Rates.
 unsigned long updateRate = 5000;            // Define Update Rate
-static unsigned long refreshRate = 1;       // Time period for IDLE state.
+static unsigned long refreshRate = 5;       // Time period for IDLE state.
 static unsigned long publishTime = 0;       // Timestamp for Ubidots publish
 const unsigned long webhookTimeout = 45000; // Timeperiod to wait for a response from Ubidots before going to error State.
 unsigned long webhookTimeStamp = 0;         // Webhooks timestamp.
@@ -87,7 +88,7 @@ static unsigned long adaptiveReadingRate = 5; // Interval for adaptive measuring
 
 // Variables releated to the sensors
 
-bool verboseMode;         // Variable VerboseMode.
+bool verboseMode = true;  // Variable VerboseMode.
 float temperatureInC = 0; // Current Temp Reading global variable
 float voltage;            // Voltage level of the LiPo battery - 3.6-4.2V range
 bool inTransit = false;   // This variable is used to check if the data is inTransit to Ubidots or not. If inTransit is false, Then data is succesfully sent.
@@ -103,8 +104,10 @@ void setup()
   deviceID.toCharArray(responseTopic, 125);
   Particle.subscribe(responseTopic, UbidotsHandler, MY_DEVICES); // Subscribe to the integration response event
 
-  getTemperature();
-  adaptiveMode();
+  // Particle Functions.
+
+  Particle.function("verboseMode", SetVerboseMode); // Added Particle Function For VerboseMode.
+  Particle.function("GetReading", forcedReading);   // This function will force it to get a reading and set the refresh rate to 15mins.
 
   // Particle Variables
 
@@ -113,10 +116,9 @@ void setup()
   Particle.variable("Signal", signalString);       // Particle variables that enable monitoring using the mobile app
   Particle.variable("Battery", batteryString);     // Battery level in V as the Argon does not have a fuel cell
 
-  // Particle Functions.
+  getTemperature();
+  adaptiveMode();
 
-  Particle.function("verboseMode", SetVerboseMode); // Added Particle Function For VerboseMode.
-  Particle.function("GetReading", forcedReading);   // This function will force it to get a reading and set the refresh rate to 15mins.
   if (verboseMode)
     Particle.publish("State", "IDLE", PRIVATE);
 
@@ -132,54 +134,32 @@ void loop()
   case IDLE_STATE: // IDLE State.
     if (verboseMode && oldState != state)
       transitionState(); // If verboseMode is on and state is changed, Then publish the state transition.
-    static unsigned long TimePassed = 0;
-    if (Time.minute() - TimePassed >= refreshRate)
     {
-      state = MEASURING_STATE;
-      TimePassed = Time.minute();
+      static unsigned long TimePassed = 0;
+      if (Time.minute() - TimePassed >= refreshRate)
+      {
+        state = MEASURING_STATE;
+        TimePassed = Time.minute();
+      }
     }
     break;
 
   case MEASURING_STATE:
 
-    // static unsigned long ForcedValueTimePassed = 0;
-    // static unsigned long adaptiveValueTimePassed = 0;
-
     if (verboseMode && oldState != state)
       transitionState(); // If verboseMode is on and state is changed, Then publish the state transition.
 
     // Measuring State.
-    getMeasurements(); // Get Measurements and Move to Reporting State if there is a change
-    state = REPORTING_STATE;
+    if (getMeasurements())
+    {
+      state = REPORTING_DETERMINATION;
+    } // Get Measurements and move to the next state.
 
     if (verboseMode)
     {
       waitUntil(PublishDelayFunction);
-      Particle.publish("State", "Change detected - Reporting", PRIVATE);
+      Particle.publish("State", " Moving Reporting Determination ", PRIVATE);
     }
-
-    if (Time.hour() != publishTimeHour) // Check if 60 minutes or 1 hr has passed.
-    {
-      state = REPORTING_STATE;
-      if (verboseMode)
-      {
-        waitUntil(PublishDelayFunction);
-        Particle.publish("State", "Time Passed - Reporting", PRIVATE); //Tells us that One Hour has passed.
-      }
-    }
-
-    // // AdaptiveMode
-    // if ((adaptiveModeOn) && (Time.minute() - adaptiveValueTimePassed > adaptiveReadingRate)) // Checks if adaptiveMode is ON and 5 minutes have passed from the last value.
-    // {
-    //   state = REPORTING_STATE;
-    //   adaptiveValueTimePassed = Time.minute();
-
-    //   if (verboseMode)
-    //   {
-    //     waitUntil(PublishDelayFunction);
-    //     Particle.publish("ADAPTIVE ON", "Next value in 5 minutes", PRIVATE);
-    //   }
-    // }
 
     else
     {
@@ -191,6 +171,49 @@ void loop()
       }
     }
     break;
+
+  case REPORTING_DETERMINATION: // Reporting determination state.
+  {
+    static unsigned long adaptiveValueTimePassed = 0;
+
+    if (verboseMode && oldState != state)
+      transitionState(); // If verboseMode is on and state is changed, Then publish the state transition.
+
+    if (Time.hour() != publishTimeHour) // Check if 60 minutes or 1 hr has passed.
+    {
+      state = REPORTING_STATE;
+      if (verboseMode)
+      {
+        waitUntil(PublishDelayFunction);
+        Particle.publish("State", "Time Passed - Reporting", PRIVATE); //Tells us that One Hour has passed.
+      }
+    }
+
+    // AdaptiveMode
+    if ((adaptiveModeOn) && (Time.minute() - adaptiveValueTimePassed > adaptiveReadingRate)) // Checks if adaptiveMode is ON and 5 minutes have passed from the last value.
+    {
+      state = REPORTING_STATE;
+      adaptiveValueTimePassed = Time.minute();
+
+      if (verboseMode)
+      {
+        waitUntil(PublishDelayFunction);
+        Particle.publish("ADAPTIVE ON", "Next value in 5 minutes", PRIVATE);
+      }
+    }
+
+    else
+    {
+      state = REPORTING_STATE;
+      if (verboseMode)
+      {
+        waitUntil(PublishDelayFunction);
+        Particle.publish("State", "No change - Idle", PRIVATE);
+      }
+    }
+  }
+
+  break;
 
   case REPORTING_STATE:
     if (verboseMode && oldState != state)
@@ -376,7 +399,7 @@ bool forcedReading(String Command)
 
   if (Command == "1")
   {
-    state = MEASURING_STATE;
+    state = REPORTING_STATE;
     forcedReadingRate = 5;
     forcedMode = true;
     Particle.publish("STATE", "Getting Value, Next Reading in 15 Mins.");
