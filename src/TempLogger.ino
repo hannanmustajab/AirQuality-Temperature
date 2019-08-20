@@ -133,7 +133,10 @@ void loop()
   {
   case IDLE_STATE: // IDLE State.
     if (verboseMode && oldState != state)
+    {
       transitionState(); // If verboseMode is on and state is changed, Then publish the state transition.
+    }
+
     {
       static unsigned long TimePassed = 0;
       if (Time.minute() - TimePassed >= refreshRate)
@@ -152,18 +155,17 @@ void loop()
     // Measuring State.
     if (getMeasurements())
     {
-      state = REPORTING_DETERMINATION;
+      state = MEASURING_STATE;
+      if (verboseMode)
+      {
+        waitUntil(PublishDelayFunction);
+        Particle.publish("State", " Moving Reporting Determination ", PRIVATE);
+      }
     } // Get Measurements and move to the next state.
-
-    if (verboseMode)
-    {
-      waitUntil(PublishDelayFunction);
-      Particle.publish("State", " Moving Reporting Determination ", PRIVATE);
-    }
 
     else
     {
-      state = IDLE_STATE;
+      state = REPORTING_DETERMINATION;
       if (verboseMode)
       {
         waitUntil(PublishDelayFunction);
@@ -204,7 +206,7 @@ void loop()
 
     else
     {
-      state = REPORTING_STATE;
+      state = IDLE_STATE;
       if (verboseMode)
       {
         waitUntil(PublishDelayFunction);
