@@ -45,7 +45,7 @@
 // v1.12 - Cleaned up the code a small bit and added new tasks
 // v1.13 - Rewritten the Forced Reading Function.
 
-const char releaseNumber[6] = "1.13"; // Displays the release on the menu
+const char releaseNumber[6] = "1.14"; // Displays the release on the menu
 
 #include "DS18.h" // Include the OneWire library
 
@@ -153,23 +153,24 @@ void loop()
       transitionState(); // If verboseMode is on and state is changed, Then publish the state transition.
 
     // Measuring State.
-    if (getMeasurements())
+    if (getMeasurements()) // if there is change in value, Then move directly to Reporting state.
     {
-      state = MEASURING_STATE;
+      state = REPORTING_STATE;
       if (verboseMode)
       {
         waitUntil(PublishDelayFunction);
         Particle.publish("State", " Moving Reporting Determination ", PRIVATE);
       }
-    } // Get Measurements and move to the next state.
+    }
+    // Get Measurements and move to the next state.
 
-    else
+    else // If there is no change, Move to reporting determination.
     {
       state = REPORTING_DETERMINATION;
       if (verboseMode)
       {
         waitUntil(PublishDelayFunction);
-        Particle.publish("State", "No change - Idle", PRIVATE);
+        Particle.publish("State", "Reporting Determination", PRIVATE);
       }
     }
     break;
@@ -227,6 +228,10 @@ void loop()
     {
       waitUntil(PublishDelayFunction);
       Particle.publish("Temperature", temperatureString, PRIVATE);
+    }
+    if (verboseMode)
+    {
+      waitUntil(PublishDelayFunction);
       Particle.publish("State", "Waiting RESPONSE", PRIVATE);
     }
     sendUBIDots();
@@ -423,6 +428,7 @@ bool adaptiveMode()
   if ((Time.hour() == 5) || (Time.hour() == 6) || (Time.hour() == 0) || (Time.hour() == 1))
   {
     adaptiveModeOn = true;
+    refreshRate = 1;
     return 1;
   }
 
