@@ -30,8 +30,10 @@
 // v1.15 - Added multiple tries for sensor read
 // v1.16 - Fixed Top of the Hour Multiple Sends
 // v1.17 - Added a confirmation message - sent if not in verbose mode
+// v1.18 - Continued to refine non-verboseMode - now default
+// v1.19 - Turned off error reporting for temp sensor if not in verbose mode
 
-const char releaseNumber[6] = "1.17"; // Displays the release on the menu
+const char releaseNumber[6] = "1.19"; // Displays the release on the menu
 
 #include "DS18.h" // Include the OneWire library
 
@@ -73,11 +75,9 @@ int currentHourlyPeriod = 0;                                                    
 
 
 // Variables releated to the sensors
-bool verboseMode = true;                                                          // Variable VerboseMode.
+bool verboseMode = false;                                                         // Variable VerboseMode.
 float temperatureInC = 0;                                                         // Current Temp Reading global variable
 float voltage;                                                                    // Voltage level of the LiPo battery - 3.6-4.2V range
-
-
 
 void setup()
 {
@@ -258,10 +258,10 @@ bool getTemperature() {                                                         
       snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", temperatureInC);
       return 1;
     }
-    Particle.process();
+    Particle.process();                                                           // This could tie up the Argon making it unresponsive to Particle commands
     snprintf(data,sizeof(data),"Sensor Read Failed, attempt %i",i);
-    waitUntil(PublishDelayFunction);
-    Particle.publish("Sensing",data,PRIVATE);
+    waitUntil(PublishDelayFunction);                                              // Use this function to slow the reading of the sensor
+    if (verboseMode) Particle.publish("Sensing",data,PRIVATE);                    // Send messages so we can see if sensor is mesbehaving
   }
   return 0;
 }
@@ -313,17 +313,25 @@ void UbidotsHandler(const char *event, const char *data)                        
 {
   // Response Template: "{{hourly.0.status_code}}"
   if (!data) {                                                                    // First check to see if there is any data
-    Particle.publish("Ubidots Hook", "No Data", PRIVATE);
+    if (verboseMode) {
+      waitUntil(PublishDelayFunction);
+      Particle.publish("Ubidots Hook", "No Data", PRIVATE);
+    }
     return;
   }
   int responseCode = atoi(data);                                                  // Response is only a single number thanks to Template
   if ((responseCode == 200) || (responseCode == 201))
   {
-    Particle.publish("State", "Response Received", PRIVATE);
+    if (verboseMode) {
+      waitUntil(PublishDelayFunction);
+      Particle.publish("State", "Response Received", PRIVATE);
+    }
     inTransit = false;                                                            // Data has been received
   }
-  else
+  else if (verboseMode) {
+    waitUntil(PublishDelayFunction);      
     Particle.publish("Ubidots Hook", data, PRIVATE);                              // Publish the response code
+  }
 }
 
 void transitionState(void) {                                                      // This function publishes change of state.
