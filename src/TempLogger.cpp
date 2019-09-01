@@ -34,6 +34,8 @@
 // v1.13 - Rewritten the Forced Reading Function.
 // v1.14 - Fixed adaptive sampling 
 // v1.15 - Added multiple tries for sensor read
+// v1.16 - Fixed Top of the Hour Multiple Sends
+// v1.17 - Added a confirmation message - sent if not in verbose mode
 
 void setup();
 void loop();
@@ -48,8 +50,8 @@ void UbidotsHandler(const char *event, const char *data);
 void transitionState(void);
 bool sendNow(String Command);
 bool senseNow(String Command);
-#line 32 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
-const char releaseNumber[6] = "1.15"; // Displays the release on the menu
+#line 34 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
+const char releaseNumber[6] = "1.16"; // Displays the release on the menu
 
 #include "DS18.h" // Include the OneWire library
 
@@ -87,6 +89,8 @@ unsigned long webhookTimeStamp = 0;                                             
 unsigned long resetStartTimeStamp = 0;                                            // Start the clock on Reset
 const int resetDelayTime = 30000;                                                 // How long to we wait before we reset in the error state
 bool inTransit = false;                                                           // This variable is used to check if the data is inTransit to Ubidots or not. If inTransit is false, Then data is succesfully sent.
+int currentHourlyPeriod = 0;                                                      // keep track of when the hour changes
+
 
 // Variables releated to the sensors
 bool verboseMode = true;                                                          // Variable VerboseMode.
@@ -130,7 +134,7 @@ void loop()
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
       static unsigned long TimePassed = 0;
 
-      if ((Time.minute() - TimePassed >= sampleRate) || Time.minute()== 0) {     // Sample time or the top of the hour
+      if ((Time.minute() - TimePassed >= sampleRate) || Time.hour() != currentHourlyPeriod) {     // Sample time or the top of the hour
         state = MEASURING_STATE;
         TimePassed = Time.minute();
       }
@@ -148,8 +152,7 @@ void loop()
     case REPORTING_DETERMINATION:                                                 // Reporting determination state.
     {
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
-      static int currentHourlyPeriod = 0;                                         // keep track of when the hour changes
-      static float lastTemperatureInC = 0;
+       static float lastTemperatureInC = 0;
 
       // Four possible outcomes: 1) Top of the hour - report, 2) Big change in Temp - report and move to rapid sampling, 3) small change in Temp - report and normal sampling, 4) No change in temp - back to Idle
       if (Time.hour() != currentHourlyPeriod) {                                   // Case 1 - If it is a new hour - report
@@ -174,7 +177,7 @@ void loop()
       else if (temperatureInC != lastTemperatureInC) {                            // Case 3 - smal change in Temp - report and normal sampling
         if (verboseMode) {
           waitUntil(PublishDelayFunction);
-          Particle.publish("State", "Change - Reporting", PRIVATE);               // Report for diagnostics
+          Particle.publish("State", "Change detected - Reporting", PRIVATE);      // Report for diagnostics
         }
         lastTemperatureInC = temperatureInC;
         state = REPORTING_STATE;
@@ -207,7 +210,13 @@ void loop()
     case RESPONSE_WAIT:
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
 
-      if (!inTransit) state = IDLE_STATE;                                         // This checks for the response from UBIDOTS. 
+      if (!inTransit) {
+        state = IDLE_STATE;                                                       // This checks for the response from UBIDOTS. 
+        if (!verboseMode) {                                                       // Abbreviated messaging for non-verbose mode
+          waitUntil(PublishDelayFunction);
+          Particle.publish("State", "Data Sent / Response Received", PRIVATE);    // Lets everyone know data was send successfully
+        }
+      } 
 
       if (millis() - webhookTimeStamp > webhookTimeout) {                         // If device does not respond in 45 Seconds, Then Reset it.
         Particle.publish("spark/device/session/end", "", PRIVATE); 

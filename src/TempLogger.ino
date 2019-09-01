@@ -29,8 +29,9 @@
 // v1.14 - Fixed adaptive sampling 
 // v1.15 - Added multiple tries for sensor read
 // v1.16 - Fixed Top of the Hour Multiple Sends
+// v1.17 - Added a confirmation message - sent if not in verbose mode
 
-const char releaseNumber[6] = "1.16"; // Displays the release on the menu
+const char releaseNumber[6] = "1.17"; // Displays the release on the menu
 
 #include "DS18.h" // Include the OneWire library
 
@@ -156,7 +157,7 @@ void loop()
       else if (temperatureInC != lastTemperatureInC) {                            // Case 3 - smal change in Temp - report and normal sampling
         if (verboseMode) {
           waitUntil(PublishDelayFunction);
-          Particle.publish("State", "Change - Reporting", PRIVATE);               // Report for diagnostics
+          Particle.publish("State", "Change detected - Reporting", PRIVATE);      // Report for diagnostics
         }
         lastTemperatureInC = temperatureInC;
         state = REPORTING_STATE;
@@ -189,7 +190,13 @@ void loop()
     case RESPONSE_WAIT:
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
 
-      if (!inTransit) state = IDLE_STATE;                                         // This checks for the response from UBIDOTS. 
+      if (!inTransit) {
+        state = IDLE_STATE;                                                       // This checks for the response from UBIDOTS. 
+        if (!verboseMode) {                                                       // Abbreviated messaging for non-verbose mode
+          waitUntil(PublishDelayFunction);
+          Particle.publish("State", "Data Sent / Response Received", PRIVATE);    // Lets everyone know data was send successfully
+        }
+      } 
 
       if (millis() - webhookTimeStamp > webhookTimeout) {                         // If device does not respond in 45 Seconds, Then Reset it.
         Particle.publish("spark/device/session/end", "", PRIVATE); 
