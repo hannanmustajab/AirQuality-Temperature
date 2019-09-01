@@ -7,27 +7,9 @@
 
 /* 
       ***  Next Steps ***
-      Good 1) Add more comments in your code - helps in sharing with others and remembering why you did something 6 months from now
-      Not Complete 2) Need to report every hour - even if the temperature has not changed.  
-      Good 3) Next, we need to complete the reporting loop to Ubidots.  You will get a response when you send a webhook to Ubidots.
-          - Check that this repose is "201" which is defined using the response template in your WebHook
-          - Add a function that reads this response and published a message (if in verboseMode) that the data was received by Ubidots
-          - Add a new state (RESPONSE_WAIT) that will look for the response from Ubidots and timeout if 45 seconds pass - going to an ERROR_STATE
-          - Add a new state (ERROR_STATE) which will reset the Argon after 30 seconds
-      Good 4) In reporting state, why two If conditionals?
-      Good 5) In response wait state, where is the state transition message?
-      Not Complete 6) In ERROR state, publish that resetting in 30 secs, then delay 30 secs and reset the device.
-      Good 7) Add a Particle.function() that will enable you to force a measurement then change the measuring frequency to 15 mins.
-      8) Adaptive sampling - I have an idea that could be interesting.  I have not yet implemented this on my sensors so, something new
-      Adaptive sampling rate ( we will do this on temp for now).   Here is the PublishDelayFunction
-        - Have a base rate of sampling - say every 15 minutes
-        - Only report to Ubidots if there is a change greater than x
-        - However, if there is a change of y  (where y > x) then we start sampling ever 5 minutes 
-        - We only report to Ubidots if there is a chance greater than x
-        - Once we have a period where the change is z (z < x), we go back to sampling every 15 minutes
-        - Even if there is no change, we report at least every hour
-      Think of this use case.  If we are sampling air quality, imagine sampling at a slower rate but, when there is a sudden change, 
-      such as during rush hour, we take more frequent samples and show to less frequent samples when there is less change.
+      - Implement sleep 
+      - Store some persisten variables in EEPROM
+      - Add the CCS811 Sensor
  */
 
 // v1.00 - Got the metering working, tested with sensor - viable code
@@ -45,14 +27,9 @@
 // v1.12 - Cleaned up the code a small bit and added new tasks
 // v1.13 - Rewritten the Forced Reading Function.
 // v1.14 - Fixed adaptive sampling 
+// v1.15 - Added multiple tries for sensor read
 
-/*
-Comments for this fix
-- No static needed for global variables
-
-*/
-
-const char releaseNumber[6] = "1.14"; // Displays the release on the menu
+const char releaseNumber[6] = "1.15"; // Displays the release on the menu
 
 #include "DS18.h" // Include the OneWire library
 
@@ -108,10 +85,11 @@ void setup()
 
   // Particle Functions.
   Particle.function("verboseMode", SetVerboseMode);                               // Added Particle Function For VerboseMode.
-  Particle.function("GetReading", sendNow);                                 // This function will force it to get a reading and set the refresh rate to 15mins.
+  Particle.function("Get-Reading", senseNow);                                     // This function will force it to get a reading and set the refresh rate to 15mins.
+  Particle.function("Send-Report", sendNow);                                      // This function will force it to get a reading and set the refresh rate to 15mins.
 
   // Particle Variables
-  Particle.variable("celsius", temperatureString);                                // Setup Particle Variable
+  Particle.variable("Temperature", temperatureString);                            // Setup Particle Variable
   Particle.variable("Release", releaseNumber);                                    // So we can see what release is running from the console
   Particle.variable("Signal", signalString);                                      // Particle variables that enable monitoring using the mobile app
   Particle.variable("Battery", batteryString);                                    // Battery level in V as the Argon does not have a fuel cell
@@ -263,14 +241,20 @@ bool getMeasurements()
   else return 0;                                                                  // Less than 1 degree difference detected
 }
 
-
 bool getTemperature() {                                                           // Function to get temperature value from DS18B20.
-  if (sensor.read()) {
-    temperatureInC = sensor.celsius();
-    snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", temperatureInC);
-    return 1;
+  char data[32];
+  for (int i=1; i <= 10; i++) {
+    if (sensor.read()) {
+      temperatureInC = sensor.celsius();
+      snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", temperatureInC);
+      return 1;
+    }
+    Particle.process();
+    snprintf(data,sizeof(data),"Sensor Read Failed, attempt %i",i);
+    waitUntil(PublishDelayFunction);
+    Particle.publish("Sensing",data,PRIVATE);
   }
-  else return 0;
+  return 0;
 }
 
 
@@ -347,7 +331,21 @@ bool sendNow(String Command)                                                    
   if (Command == "1") {
     state = REPORTING_STATE;                                                      // Set the state to reporting
     waitUntil(PublishDelayFunction);  
-    Particle.publish("Function", "Command accepted - sending now",PRIVATE);               // Acknowledge receipt
+    Particle.publish("Function", "Command accepted - reporting now",PRIVATE);     // Acknowledge receipt
+    return 1;
+  }
+  else if (Command == "0") {                                                      // No action required
+    return 1;
+  }
+  return 0;
+}
+
+bool senseNow(String Command)                                                      // This command lets you force a reporting cycle
+{
+  if (Command == "1") {
+    state = MEASURING_STATE;                                                      // Set the state to reporting
+    waitUntil(PublishDelayFunction);  
+    Particle.publish("Function", "Command accepted - sensing now",PRIVATE);       // Acknowledge receipt
     return 1;
   }
   else if (Command == "0") {                                                      // No action required
