@@ -3,7 +3,7 @@
 /******************************************************/
 
 #include "application.h"
-#line 1 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
+#line 1 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
 /*
  * Project TempLogger
  * Description: Reading Temperature from OneWire 18B20 and sending it to particle cloud. 
@@ -48,7 +48,8 @@ void UbidotsHandler(const char *event, const char *data);
 void transitionState(void);
 bool sendNow(String Command);
 bool senseNow(String Command);
-#line 32 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
+bool LowPowerMode(String Command);
+#line 32 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
 const char releaseNumber[6] = "1.15"; // Displays the release on the menu
 
 #include "DS18.h" // Include the OneWire library
@@ -65,10 +66,11 @@ enum State
   REPORTING_DETERMINATION,
   REPORTING_STATE,
   RESPONSE_WAIT,
-  ERROR_STATE
+  ERROR_STATE,
+  NAPPING_STATE
 };
 // These are the allowed states in the main loop
-char stateNames[7][44] = {"Initial State", "Idle State", "Measuring", "Reporting Determination", "Reporting", "Response Wait", "Error Wait"};
+char stateNames[8][44] = {"Initial State", "Idle State", "Measuring", "Reporting Determination", "Reporting", "Response Wait", "Error Wait", "Napping State"};
 State state = INITIALIZATION_STATE;                                               // Initialize the state variable
 State oldState = INITIALIZATION_STATE;                                            //Initialize the oldState Variable
 
@@ -93,7 +95,7 @@ bool verboseMode = true;                                                        
 float temperatureInC = 0;                                                         // Current Temp Reading global variable
 float voltage;                                                                    // Voltage level of the LiPo battery - 3.6-4.2V range
 
-
+ 
 
 void setup()
 {
@@ -107,7 +109,8 @@ void setup()
   Particle.function("verboseMode", SetVerboseMode);                               // Added Particle Function For VerboseMode.
   Particle.function("Get-Reading", senseNow);                                     // This function will force it to get a reading and set the refresh rate to 15mins.
   Particle.function("Send-Report", sendNow);                                      // This function will force it to get a reading and set the refresh rate to 15mins.
-
+  Particle.function("Low-Power-Mode", LowPowerMode);                              // This function will send the device to low power mode or napping.  
+  
   // Particle Variables
   Particle.variable("Temperature", temperatureString);                            // Setup Particle Variable
   Particle.variable("Release", releaseNumber);                                    // So we can see what release is running from the console
@@ -224,6 +227,13 @@ void loop()
         delay(2000);                                                              // Get the message out before resetting
         System.reset();
       }
+      break;
+
+    case NAPPING_STATE: // This state puts the device to sleep mode
+      if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
+      System.sleep(300);  
+        Particle.publish("Napping", "5 Minutes of Nap");
+
       break;
   }
 }
@@ -372,4 +382,18 @@ bool senseNow(String Command)                                                   
     return 1;
   }
   return 0;
+}
+
+bool LowPowerMode(String Command)
+{
+  if (Command == "1")
+  {
+    state = NAPPING_STATE;
+    return 1;
+  }
+  else if (Command == "0")
+  {
+    return 1;
+  }
+  else return 0;
 }
