@@ -34,6 +34,10 @@
 // v1.13 - Rewritten the Forced Reading Function.
 // v1.14 - Fixed adaptive sampling 
 // v1.15 - Added multiple tries for sensor read
+// v1.16 - Fixed Top of the Hour Multiple Sends
+// v1.17 - Added a confirmation message - sent if not in verbose mode
+// v1.18 - Continued to refine non-verboseMode - now default
+// v1.19 - Turned off error reporting for temp sensor if not in verbose mode
 
 void setup();
 void loop();
@@ -48,9 +52,17 @@ void UbidotsHandler(const char *event, const char *data);
 void transitionState(void);
 bool sendNow(String Command);
 bool senseNow(String Command);
+<<<<<<< HEAD
 bool LowPowerMode(String Command);
 #line 32 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
 const char releaseNumber[6] = "1.15"; // Displays the release on the menu
+||||||| merged common ancestors
+#line 32 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
+const char releaseNumber[6] = "1.15"; // Displays the release on the menu
+=======
+#line 36 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
+const char releaseNumber[6] = "1.19"; // Displays the release on the menu
+>>>>>>> b23c61b569307521b8f1c1334221a5afbebafe8f
 
 #include "DS18.h" // Include the OneWire library
 
@@ -89,14 +101,22 @@ unsigned long webhookTimeStamp = 0;                                             
 unsigned long resetStartTimeStamp = 0;                                            // Start the clock on Reset
 const int resetDelayTime = 30000;                                                 // How long to we wait before we reset in the error state
 bool inTransit = false;                                                           // This variable is used to check if the data is inTransit to Ubidots or not. If inTransit is false, Then data is succesfully sent.
+int currentHourlyPeriod = 0;                                                      // keep track of when the hour changes
+
 
 // Variables releated to the sensors
-bool verboseMode = true;                                                          // Variable VerboseMode.
+bool verboseMode = false;                                                         // Variable VerboseMode.
 float temperatureInC = 0;                                                         // Current Temp Reading global variable
 float voltage;                                                                    // Voltage level of the LiPo battery - 3.6-4.2V range
 
+<<<<<<< HEAD
  
 
+||||||| merged common ancestors
+
+
+=======
+>>>>>>> b23c61b569307521b8f1c1334221a5afbebafe8f
 void setup()
 {
   // This part receives Response using Particle.subscribe() and tells the response received from Ubidots.
@@ -133,7 +153,7 @@ void loop()
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
       static unsigned long TimePassed = 0;
 
-      if ((Time.minute() - TimePassed >= sampleRate) || Time.minute()== 0) {     // Sample time or the top of the hour
+      if ((Time.minute() - TimePassed >= sampleRate) || Time.hour() != currentHourlyPeriod) {     // Sample time or the top of the hour
         state = MEASURING_STATE;
         TimePassed = Time.minute();
       }
@@ -151,8 +171,7 @@ void loop()
     case REPORTING_DETERMINATION:                                                 // Reporting determination state.
     {
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
-      static int currentHourlyPeriod = 0;                                         // keep track of when the hour changes
-      static float lastTemperatureInC = 0;
+       static float lastTemperatureInC = 0;
 
       // Four possible outcomes: 1) Top of the hour - report, 2) Big change in Temp - report and move to rapid sampling, 3) small change in Temp - report and normal sampling, 4) No change in temp - back to Idle
       if (Time.hour() != currentHourlyPeriod) {                                   // Case 1 - If it is a new hour - report
@@ -177,7 +196,7 @@ void loop()
       else if (temperatureInC != lastTemperatureInC) {                            // Case 3 - smal change in Temp - report and normal sampling
         if (verboseMode) {
           waitUntil(PublishDelayFunction);
-          Particle.publish("State", "Change - Reporting", PRIVATE);               // Report for diagnostics
+          Particle.publish("State", "Change detected - Reporting", PRIVATE);      // Report for diagnostics
         }
         lastTemperatureInC = temperatureInC;
         state = REPORTING_STATE;
@@ -210,7 +229,13 @@ void loop()
     case RESPONSE_WAIT:
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
 
-      if (!inTransit) state = IDLE_STATE;                                         // This checks for the response from UBIDOTS. 
+      if (!inTransit) {
+        state = IDLE_STATE;                                                       // This checks for the response from UBIDOTS. 
+        if (!verboseMode) {                                                       // Abbreviated messaging for non-verbose mode
+          waitUntil(PublishDelayFunction);
+          Particle.publish("State", "Data Sent / Response Received", PRIVATE);    // Lets everyone know data was send successfully
+        }
+      } 
 
       if (millis() - webhookTimeStamp > webhookTimeout) {                         // If device does not respond in 45 Seconds, Then Reset it.
         Particle.publish("spark/device/session/end", "", PRIVATE); 
@@ -279,10 +304,10 @@ bool getTemperature() {                                                         
       snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", temperatureInC);
       return 1;
     }
-    Particle.process();
+    Particle.process();                                                           // This could tie up the Argon making it unresponsive to Particle commands
     snprintf(data,sizeof(data),"Sensor Read Failed, attempt %i",i);
-    waitUntil(PublishDelayFunction);
-    Particle.publish("Sensing",data,PRIVATE);
+    waitUntil(PublishDelayFunction);                                              // Use this function to slow the reading of the sensor
+    if (verboseMode) Particle.publish("Sensing",data,PRIVATE);                    // Send messages so we can see if sensor is mesbehaving
   }
   return 0;
 }
@@ -334,17 +359,25 @@ void UbidotsHandler(const char *event, const char *data)                        
 {
   // Response Template: "{{hourly.0.status_code}}"
   if (!data) {                                                                    // First check to see if there is any data
-    Particle.publish("Ubidots Hook", "No Data", PRIVATE);
+    if (verboseMode) {
+      waitUntil(PublishDelayFunction);
+      Particle.publish("Ubidots Hook", "No Data", PRIVATE);
+    }
     return;
   }
   int responseCode = atoi(data);                                                  // Response is only a single number thanks to Template
   if ((responseCode == 200) || (responseCode == 201))
   {
-    Particle.publish("State", "Response Received", PRIVATE);
+    if (verboseMode) {
+      waitUntil(PublishDelayFunction);
+      Particle.publish("State", "Response Received", PRIVATE);
+    }
     inTransit = false;                                                            // Data has been received
   }
-  else
+  else if (verboseMode) {
+    waitUntil(PublishDelayFunction);      
     Particle.publish("Ubidots Hook", data, PRIVATE);                              // Publish the response code
+  }
 }
 
 void transitionState(void) {                                                      // This function publishes change of state.
