@@ -70,7 +70,7 @@ unsigned long resetStartTimeStamp = 0;                                          
 const int resetDelayTime = 30000;                                                 // How long to we wait before we reset in the error state
 bool inTransit = false;                                                           // This variable is used to check if the data is inTransit to Ubidots or not. If inTransit is false, Then data is succesfully sent.
 int currentHourlyPeriod = 0;                                                      // keep track of when the hour changes
-
+const int sleepTimePeriod = 30;
 
 // Variables releated to the sensors
 bool verboseMode = false;                                                         // Variable VerboseMode.
@@ -115,7 +115,7 @@ void loop()
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
       static unsigned long TimePassed = 0;
 
-      if (lowPowerModeOn) state = NAPPING_STATE;                                 // If lowPowerMode is turned on, It will move to the napping state. 
+      if ((lowPowerModeOn && sampleRate) == (normalSamplePeriodMinutes)) state = NAPPING_STATE;                                 // If lowPowerMode is turned on, It will move to the napping state. 
 
       if ((Time.minute() - TimePassed >= sampleRate) || Time.minute()== 0) {     // Sample time or the top of the hour
         state = MEASURING_STATE;
@@ -221,9 +221,10 @@ void loop()
     case NAPPING_STATE: // This state puts the device to sleep mode
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
       Particle.publish("Napping", "5 Minutes of Nap");
-        System.sleep(30);  
-        
-
+      System.sleep(SLEEP_MODE_DEEP,sleepTimePeriod);  
+      sampleRate = normalSamplePeriodMinutes;
+      Particle.connect();
+      state = IDLE_STATE;
       break;
   }
 }

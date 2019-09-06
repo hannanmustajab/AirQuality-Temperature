@@ -34,10 +34,7 @@
 // v1.13 - Rewritten the Forced Reading Function.
 // v1.14 - Fixed adaptive sampling 
 // v1.15 - Added multiple tries for sensor read
-// v1.16 - Fixed Top of the Hour Multiple Sends
-// v1.17 - Added a confirmation message - sent if not in verbose mode
-// v1.18 - Continued to refine non-verboseMode - now default
-// v1.19 - Turned off error reporting for temp sensor if not in verbose mode
+// v1.16 - Added LowPowerMode
 
 void setup();
 void loop();
@@ -52,17 +49,9 @@ void UbidotsHandler(const char *event, const char *data);
 void transitionState(void);
 bool sendNow(String Command);
 bool senseNow(String Command);
-<<<<<<< HEAD
 bool LowPowerMode(String Command);
-#line 32 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
-const char releaseNumber[6] = "1.15"; // Displays the release on the menu
-||||||| merged common ancestors
-#line 32 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
-const char releaseNumber[6] = "1.15"; // Displays the release on the menu
-=======
-#line 36 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
-const char releaseNumber[6] = "1.19"; // Displays the release on the menu
->>>>>>> b23c61b569307521b8f1c1334221a5afbebafe8f
+#line 33 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
+const char releaseNumber[6] = "1.16"; // Displays the release on the menu
 
 #include "DS18.h" // Include the OneWire library
 
@@ -102,21 +91,15 @@ unsigned long resetStartTimeStamp = 0;                                          
 const int resetDelayTime = 30000;                                                 // How long to we wait before we reset in the error state
 bool inTransit = false;                                                           // This variable is used to check if the data is inTransit to Ubidots or not. If inTransit is false, Then data is succesfully sent.
 int currentHourlyPeriod = 0;                                                      // keep track of when the hour changes
-
+const int sleepTimePeriod = 30;
 
 // Variables releated to the sensors
 bool verboseMode = false;                                                         // Variable VerboseMode.
 float temperatureInC = 0;                                                         // Current Temp Reading global variable
 float voltage;                                                                    // Voltage level of the LiPo battery - 3.6-4.2V range
-
-<<<<<<< HEAD
+bool lowPowerModeOn = false;                                                      // Variable to check the status of lowPowerMode. 
  
 
-||||||| merged common ancestors
-
-
-=======
->>>>>>> b23c61b569307521b8f1c1334221a5afbebafe8f
 void setup()
 {
   // This part receives Response using Particle.subscribe() and tells the response received from Ubidots.
@@ -153,7 +136,9 @@ void loop()
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
       static unsigned long TimePassed = 0;
 
-      if ((Time.minute() - TimePassed >= sampleRate) || Time.hour() != currentHourlyPeriod) {     // Sample time or the top of the hour
+      if ((lowPowerModeOn && sampleRate) == (normalSamplePeriodMinutes)) state = NAPPING_STATE;                                 // If lowPowerMode is turned on, It will move to the napping state. 
+
+      if ((Time.minute() - TimePassed >= sampleRate) || Time.minute()== 0) {     // Sample time or the top of the hour
         state = MEASURING_STATE;
         TimePassed = Time.minute();
       }
@@ -256,9 +241,11 @@ void loop()
 
     case NAPPING_STATE: // This state puts the device to sleep mode
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
-      System.sleep(300);  
-        Particle.publish("Napping", "5 Minutes of Nap");
-
+      Particle.publish("Napping", "5 Minutes of Nap");
+      System.sleep(SLEEP_MODE_DEEP,sleepTimePeriod);  
+      sampleRate = normalSamplePeriodMinutes;
+      Particle.connect();
+      state = IDLE_STATE;
       break;
   }
 }
@@ -421,11 +408,12 @@ bool LowPowerMode(String Command)
 {
   if (Command == "1")
   {
-    state = NAPPING_STATE;
+    lowPowerModeOn = true;                                                         // This sets the lowPowerModeOn to true 
     return 1;
   }
   else if (Command == "0")
   {
+    lowPowerModeOn = false;
     return 1;
   }
   else return 0;
