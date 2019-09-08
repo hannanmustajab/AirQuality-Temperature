@@ -71,7 +71,7 @@ const int resetDelayTime = 30000;                                               
 bool inTransit = false;                                                           // This variable is used to check if the data is inTransit to Ubidots or not. If inTransit is false, Then data is succesfully sent.
 int currentHourlyPeriod = 0;                                                      // keep track of when the hour changes
 const int sleepTimePeriod = 30;
-
+bool sleepCheckList = true;                                                       // Checks if device is ready to sleep. 
 // Variables releated to the sensors
 bool verboseMode = false;                                                         // Variable VerboseMode.
 float temperatureInC = 0;                                                         // Current Temp Reading global variable
@@ -115,7 +115,9 @@ void loop()
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
       static unsigned long TimePassed = 0;
 
-      if ((lowPowerModeOn && sampleRate) == (normalSamplePeriodMinutes)) state = NAPPING_STATE;                                 // If lowPowerMode is turned on, It will move to the napping state. 
+      if ((lowPowerModeOn) && (sampleRate - Time.minute() >= 2)) {
+        state = NAPPING_STATE;  
+      }                               // If lowPowerMode is turned on, It will move to the napping state. 
 
       if ((Time.minute() - TimePassed >= sampleRate) || Time.minute()== 0) {     // Sample time or the top of the hour
         state = MEASURING_STATE;
@@ -220,9 +222,16 @@ void loop()
 
     case NAPPING_STATE: // This state puts the device to sleep mode
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
-      Particle.publish("Napping", "5 Minutes of Nap");
-      System.sleep(SLEEP_MODE_DEEP,sleepTimePeriod);  
-      sampleRate = normalSamplePeriodMinutes;
+      if (!sleepCheckList)
+        {
+          if (Particle.connected())
+            {
+              waitUntil(PublishDelayFunction);
+              Particle.publish("Napping", "5 Minutes of Nap");
+            }
+        }
+      int timeUntillNextReadingInSeconds = 60*((sampleRate)-(Time.minute()));  
+      System.sleep(SLEEP_MODE_DEEP,10);  
       Particle.connect();
       state = IDLE_STATE;
       break;
