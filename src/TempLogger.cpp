@@ -34,7 +34,7 @@
 // v1.13 - Rewritten the Forced Reading Function.
 // v1.14 - Fixed adaptive sampling 
 // v1.15 - Added multiple tries for sensor read
-// v1.16 - Added LowPowerMode
+// v1.16 - Added LowPowerMode 
 
 void setup();
 void loop();
@@ -136,9 +136,8 @@ void loop()
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
       static unsigned long TimePassed = 0;
 
-      if ((lowPowerModeOn) && (sampleRate - Time.minute() >= 2)) {
-        state = NAPPING_STATE;  
-      }                               // If lowPowerMode is turned on, It will move to the napping state. 
+      if ((lowPowerModeOn) && (sampleRate - Time.minute() >= 2)) state = NAPPING_STATE;    // If lowPowerMode is turned on, It will move to the napping state. 
+                                     
 
       if ((Time.minute() - TimePassed >= sampleRate) || Time.minute()== 0) {     // Sample time or the top of the hour
         state = MEASURING_STATE;
@@ -245,15 +244,18 @@ void loop()
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
       if (!sleepCheckList)
         {
-          if (Particle.connected())
-            {
-              waitUntil(PublishDelayFunction);
-              Particle.publish("Napping", "5 Minutes of Nap");
-            }
+        if (Particle.connected())
+          {
+            waitUntil(PublishDelayFunction);
+            Particle.publish("Napping", "5 Minutes of Nap");
+          }
         }
-      int timeUntillNextReadingInSeconds = 60*((sampleRate)-(Time.minute()));  
-      System.sleep(SLEEP_MODE_DEEP,10);  
+      int unsigned long timeUntillNextReadingInSeconds = 60*((sampleRate)-(1));  
+      Particle.publish("DURATION",String(Time.minute() + (timeUntillNextReadingInSeconds/60)),PRIVATE);
+      System.sleep(D8, RISING, timeUntillNextReadingInSeconds);
       Particle.connect();
+      Particle.publish("WokeUp","From Sleep",PRIVATE);
+      sleepCheckList = true;
       state = IDLE_STATE;
       break;
   }
