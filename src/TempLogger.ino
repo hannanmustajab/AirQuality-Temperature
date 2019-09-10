@@ -114,18 +114,22 @@ void loop()
     {
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
       static unsigned long TimePassed = 0;
+      
 
       if ((lowPowerModeOn) && (sampleRate - Time.minute() >= 2)) state = NAPPING_STATE;    // If lowPowerMode is turned on, It will move to the napping state. 
                                      
 
-      if ((Time.minute() - TimePassed >= sampleRate) || Time.minute()== 0) {     // Sample time or the top of the hour
-        state = MEASURING_STATE;
-        TimePassed = Time.minute();
+      if ((Time.minute() - TimePassed >= sampleRate)) {     // Sample time or the top of the hour
+       
+          state = MEASURING_STATE;
+          TimePassed = Time.minute();
+        
       }
     } break;
 
     case MEASURING_STATE:                                                         // Measuring State.
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
+      currentHourlyPeriod = Time.hour();
       if (getMeasurements()) state = REPORTING_DETERMINATION;                     // Get the measurements and move to reporting determination
       else  {
         resetStartTimeStamp = millis();
@@ -221,22 +225,22 @@ void loop()
 
     case NAPPING_STATE: // This state puts the device to sleep mode
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
-      if (!sleepCheckList)
+      
+      if (Particle.connected())
         {
-        if (Particle.connected())
-          {
-            waitUntil(PublishDelayFunction);
-            Particle.publish("Napping", "5 Minutes of Nap");
-          }
+          waitUntil(PublishDelayFunction);
+          Particle.publish("Napping", "5 Minutes of Nap");
+          int unsigned long timeUntillNextReadingInSeconds = 60*((sampleRate)-(1));  
+          Particle.publish("DURATION",String(Time.minute() + (timeUntillNextReadingInSeconds/60)),PRIVATE);
+          System.sleep(D8, RISING, timeUntillNextReadingInSeconds);
+          // pinMode(D8,INPUT);
+          // digitalWrite(D8,HIGH);
+          Particle.connect();
+          Particle.publish("WokeUp","From Sleep",PRIVATE);
+          state = IDLE_STATE;
         }
-      int unsigned long timeUntillNextReadingInSeconds = 60*((sampleRate)-(1));  
-      Particle.publish("DURATION",String(Time.minute() + (timeUntillNextReadingInSeconds/60)),PRIVATE);
-      System.sleep(D8, RISING, timeUntillNextReadingInSeconds);
-      Particle.connect();
-      Particle.publish("WokeUp","From Sleep",PRIVATE);
-      sleepCheckList = true;
-      state = IDLE_STATE;
-      break;
+        
+      break; 
   }
 }
 
