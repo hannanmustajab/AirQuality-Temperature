@@ -353,6 +353,7 @@ void sendUBIDots()                                                              
   snprintf(data, sizeof(data), "{\"Temperature\":%3.1f, \"Battery\":%3.1f}", temperatureInC, voltage);
   Particle.publish("Air-Quality-Hook", data, PRIVATE);
   webhookTimeStamp = millis();
+  currentHourlyPeriod = Time.hour();
   inTransit = true;
 }
 
