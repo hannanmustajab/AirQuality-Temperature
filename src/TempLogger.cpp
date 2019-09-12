@@ -97,7 +97,7 @@ bool sleepCheckList = true;                                                     
 bool verboseMode = false;                                                         // Variable VerboseMode.
 float temperatureInC = 0;                                                         // Current Temp Reading global variable
 float voltage;                                                                    // Voltage level of the LiPo battery - 3.6-4.2V range
-bool lowPowerModeOn = false;                                                      // Variable to check the status of lowPowerMode. 
+bool lowPowerModeOn = true;                                                      // Variable to check the status of lowPowerMode. 
  
 
 void setup()
@@ -140,11 +140,11 @@ void loop()
       if ((lowPowerModeOn) && (sampleRate - Time.minute() >= 2)) state = NAPPING_STATE;    // If lowPowerMode is turned on, It will move to the napping state. 
                                      
 
-      if ((Time.minute() - TimePassed >= sampleRate) || Time.minute()== 0) {     // Sample time or the top of the hour
-        if (Time.hour() != currentHourlyPeriod){
+      if ((Time.minute() - TimePassed >= sampleRate) || Time.hour() != currentHourlyPeriod ) {     // Sample time or the top of the hour
+       
           state = MEASURING_STATE;
           TimePassed = Time.minute();
-        }
+        
       }
     } break;
 
@@ -260,7 +260,6 @@ void loop()
           Particle.publish("WokeUp","From Sleep",PRIVATE);
           state = IDLE_STATE;
         }
-        
       break; 
   }
 }
