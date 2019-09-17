@@ -29,8 +29,9 @@
 // v1.14 - Fixed adaptive sampling 
 // v1.15 - Added multiple tries for sensor read
 // v1.16 - Added LowPowerMode 
+// v1.17 - Moved to deviceOS@1.4.0 and implemented low power fixes 
 
-const char releaseNumber[6] = "1.16"; // Displays the release on the menu
+const char releaseNumber[6] = "1.17"; // Displays the release on the menu
 
 #include "DS18.h" // Include the OneWire library
 
@@ -59,25 +60,30 @@ char signalString[16];                                                          
 char temperatureString[16];                                                       // Temperature string for Reporting
 char batteryString[16];                                                           // Battery value for reporting
 
-// Variables Related To Program Control and Timing
-const int rapidSamplePeriodMinutes = 5;                                           // How often will we sample when there is a major change in temperature
-const int normalSamplePeriodMinutes = 10;                                         // How often do we normally sample
-unsigned int sampleRate = normalSamplePeriodMinutes;                              // We start out sampling at the normal rate
-float tempChangeThreshold = 1.5;                                                  // What is the difference in temp needed to trigger rapid sampling
+// Constants that will influence the timing of the Program - collected here to make it easier to edit them
 const unsigned long webhookTimeout = 45000;                                       // Timeperiod to wait for a response from Ubidots before going to error State.
+const int resetDelayTime = 30000;                                                 // How long to we wait before we reset in the error state
+const int rapidSamplePeriodSeconds = 5*60;                                        // How often will we sample when there is a major change in temperature
+const int normalSamplePeriodSeconds = 10*60;                                      // How often do we normally sample
+const unsigned long stayAwakeShort = 5000;                                        // When we want to stay awake a short while after taking a sample measurements (make longer in development / shorter when deployed)
+const unsigned long stayAwakeLong = 90000;                                        // We will stay awake longer at the hour  - makes it easier to update code  
+
+// Variables Related To Program Control
+int sampleRate = normalSamplePeriodSeconds;                                       // We start out sampling at the normal rate
+unsigned long stayAwake;                                                          // Compare to tell us when to nap
+float tempChangeThreshold = 1.5;                                                  // What is the difference in temp needed to trigger rapid sampling
 unsigned long webhookTimeStamp = 0;                                               // Start timer for webhook timeout
 unsigned long resetStartTimeStamp = 0;                                            // Start the clock on Reset
-const int resetDelayTime = 30000;                                                 // How long to we wait before we reset in the error state
+unsigned long stayAWakeTimeStamp;                                                 // How long till I can take a nap?
 bool inTransit = false;                                                           // This variable is used to check if the data is inTransit to Ubidots or not. If inTransit is false, Then data is succesfully sent.
 int currentHourlyPeriod = 0;                                                      // keep track of when the hour changes
-const int sleepTimePeriod = 30;
-bool sleepCheckList = true;                                                       // Checks if device is ready to sleep. 
+bool lowPowerModeOn = true;                                                       // Important to set when the device is running on solar / battery power
+
 // Variables releated to the sensors
 bool verboseMode = false;                                                         // Variable VerboseMode.
 float temperatureInC = 0;                                                         // Current Temp Reading global variable
 float voltage;                                                                    // Voltage level of the LiPo battery - 3.6-4.2V range
-bool lowPowerModeOn = true;                                                      // Variable to check the status of lowPowerMode. 
- 
+
 
 void setup()
 {
@@ -101,10 +107,11 @@ void setup()
 
   getTemperature();
 
-  if (verboseMode)
-    Particle.publish("State", "IDLE", PRIVATE);
+  stayAwake = stayAwakeLong;                                                      // Stay awake longer on startup - helps with recovery for deployed devices
+  stayAWakeTimeStamp = millis();                                                  // Reset the timestamp here as the connection sequence could take a while
 
   state = IDLE_STATE;                                                             // If we made it this far, we are ready to go to IDLE in the main loop
+  if (verboseMode && oldState != state) transitionState();                        // If verboseMode is on and state is changed, Then publish the state transition.
 }
 
 void loop()
@@ -113,17 +120,13 @@ void loop()
     case IDLE_STATE:                                                              // IDLE State.
     {
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
-      static unsigned long TimePassed = 0;
+      static int TimePassed = 0;
       
-
-      if ((lowPowerModeOn) && (sampleRate - Time.minute() >= 2)) state = NAPPING_STATE;    // If lowPowerMode is turned on, It will move to the napping state. 
+      if (lowPowerModeOn && (millis() - stayAWakeTimeStamp >= stayAwake)) state = NAPPING_STATE;    // If lowPowerMode is turned on, It will move to the napping state. 
                                      
-
-      if ((Time.minute() - TimePassed >= sampleRate) || Time.hour() != currentHourlyPeriod ) {     // Sample time or the top of the hour
-       
+      if ((Time.minute() - TimePassed >= sampleRate/60) || Time.hour() != currentHourlyPeriod ) {     // Sample time or the top of the hour
           state = MEASURING_STATE;
           TimePassed = Time.minute();
-        
       }
     } break;
 
@@ -144,6 +147,7 @@ void loop()
 
       // Four possible outcomes: 1) Top of the hour - report, 2) Big change in Temp - report and move to rapid sampling, 3) small change in Temp - report and normal sampling, 4) No change in temp - back to Idle
       if (Time.hour() != currentHourlyPeriod) {                                   // Case 1 - If it is a new hour - report
+        stayAwake = stayAwakeLong;                                                // Stay awake longer at the hour - helps if you need to publish updates to deployed devices
         if (verboseMode) {
           waitUntil(PublishDelayFunction);
           Particle.publish("State", "New Hour- Reporting", PRIVATE);              // Report for diagnotics
@@ -159,7 +163,7 @@ void loop()
         }
         lastTemperatureInC = temperatureInC;
         state = REPORTING_STATE;                                                  
-        sampleRate = rapidSamplePeriodMinutes;                                    // Move to rapid sampling
+        sampleRate = rapidSamplePeriodSeconds;                                    // Move to rapid sampling
         break;
       }
       else if (temperatureInC != lastTemperatureInC) {                            // Case 3 - smal change in Temp - report and normal sampling
@@ -169,7 +173,7 @@ void loop()
         }
         lastTemperatureInC = temperatureInC;
         state = REPORTING_STATE;
-        sampleRate = normalSamplePeriodMinutes;                                   // Small but non-zero change - move to normal sampling
+        sampleRate = normalSamplePeriodSeconds;                                   // Small but non-zero change - move to normal sampling
         break;  
       }
       else {                                                                      // Case 4 - No change in temp - go back to idle
@@ -178,7 +182,7 @@ void loop()
           Particle.publish("State", "No Change - Idle", PRIVATE);                 // Report for diagnostics
         }
         state = IDLE_STATE;                                                      
-        sampleRate = normalSamplePeriodMinutes;                                   // Small but non-zero change - move to normal sampling
+        sampleRate = normalSamplePeriodSeconds;                                   // Small but non-zero change - move to normal sampling
       }
     } break;
 
@@ -223,23 +227,25 @@ void loop()
       }
       break;
 
-    case NAPPING_STATE: // This state puts the device to sleep mode
+    case NAPPING_STATE: { // This state puts the device to sleep mode
+      char data[64];
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
+
+      stayAwake = stayAwakeShort;                                                 // Don't need to wake for long when we are just sampling
+      int wakeInSeconds = constrain(sampleRate - Time.now() % sampleRate, 1, sampleRate); // Calculate the seconds to the next sample
       
-      if (Particle.connected())
-        {
-          waitUntil(PublishDelayFunction);
-          Particle.publish("Napping", "5 Minutes of Nap");
-          int unsigned long timeUntillNextReadingInSeconds = 60*((sampleRate)-(1));  
-          Particle.publish("DURATION",String(Time.minute() + (timeUntillNextReadingInSeconds/60)),PRIVATE);
-          System.sleep(D8, RISING, timeUntillNextReadingInSeconds);
-          // pinMode(D8,INPUT);
-          // digitalWrite(D8,HIGH);
-          Particle.connect();
-          Particle.publish("WokeUp","From Sleep",PRIVATE);
-          state = IDLE_STATE;
-        }
-      break; 
+      if (Particle.connected()) {
+        snprintf(data,sizeof(data),"Going to take a %i second nap", wakeInSeconds);
+        waitUntil(PublishDelayFunction);
+        Particle.publish("Napping", data, PRIVATE);
+      }
+      
+      System.sleep(D8, RISING, wakeInSeconds);                                    // This is a light sleep but all we can do until we put an external clock in
+      Particle.connect();                                                         // We need to connect and transmit data each time - can move to sample and hold in the future
+      Particle.publish("WokeUp","From Sleep",PRIVATE);
+      stayAWakeTimeStamp = millis();                                              // Start the clock on how long we are awake
+      state = IDLE_STATE;
+    } break; 
   }
 }
 
