@@ -9,5 +9,7 @@
     "particle.targetDevice": "Argon-Dev",
     "C_Cpp.errorSquiggles": "Disabled",
     "C_Cpp.formatting": "Disabled",
-    "C_Cpp.clang_format_sortIncludes": false
+    "C_Cpp.clang_format_sortIncludes": false,
+    "python.pythonPath": "/usr/bin/python",
+    "python.formatting.provider": "black"
 }
