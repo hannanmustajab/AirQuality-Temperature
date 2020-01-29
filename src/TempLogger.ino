@@ -31,6 +31,7 @@
 // v1.16 - Added LowPowerMode 
 // v1.17 - Moved to deviceOS@1.4.0 and implemented low power fixes 
 // v1.18 - Added some variables to EEPROM. 
+// v1.19 - Fixed some issues with the memory map
 
 const char releaseNumber[6] = "1.17"; // Displays the release on the menu
 
@@ -95,11 +96,11 @@ byte currentMinutePeriod;                           // control timing when using
 // Define the memory map - note can be EEPROM or FRAM
 namespace MEM_MAP {                                 // Moved to namespace instead of #define to limit scope
   enum Addresses {
-    versionAddr           = 0x0,                    // Where we store the memory map version number - 8 Bits
-    alertCountAddr        = 0x1,                    // Where we store our current alert count - 8 Bits
-    currentCountsTimeAddr = 0x5,                    // Time of last report - 32 bits
-    sensorData1Object     = 0x6,                     // The first data object
-    resetCountAddr        = 0x2                    // This is where we keep track of how often the Argon was reset - 8 Bits
+    versionAddr           = 0x00,                    // Where we store the memory map version number - 8 Bits
+    alertCountAddr        = 0x01,                    // Where we store our current alert count - 8 Bits
+    resetCountAddr        = 0x02,                     // This is where we keep track of how often the Argon was reset - 8 Bits
+    currentCountsTimeAddr = 0x03,                    // Time of last report - 32 bits
+    sensorData1Object     = 0x07                     // The first data object - where we start writing data
    };
 };
 
@@ -336,13 +337,10 @@ bool takeMeasurements() {
   // Indicate that this is a valid data array and store it
   sensor_data.validData = true;
   sensor_data.timeStamp = Time.now();
-  EEPROM.put(6 + 100*reportCycle,sensor_data);                              // Current object is 72 bytes long - leaving some room for expansion
+  EEPROM.put(7 + 100*reportCycle,sensor_data);                              // Current object is 72 bytes long - leaving some room for expansion
 
   return 1;                                                             // Done, measurements take and the data array is stored as an obeect in EEPROM                                         
 }
-
-
-
 
 
 // Function to create a delay in the publish time
@@ -430,12 +428,10 @@ bool SetVerboseMode(String command) {                                           
 
 void sendUBIDots()                                                                // Function that sends the JSON payload to Ubidots
 {
-
-  
   char data[512];
 
   for (int i = 0; i < 4; i++) {
-    sensor_data = EEPROM.get(6 + i*100,sensor_data);                  // This spacing of the objects - 100 - must match what we put in the takeMeasurements() function
+    sensor_data = EEPROM.get(7 + i*100,sensor_data);                  // This spacing of the objects - 100 - must match what we put in the takeMeasurements() function
     snprintf(data, sizeof(data), "{\"Temperature\":%3.1f, \"Battery\":%3.1f}", sensor_data.temperatureInC, sensor_data.batteryVoltage);
     Particle.publish("Air-Quality-Hook", data, PRIVATE);
     waitUntil(PublishDelayFunction);                                  // Space out the sends
