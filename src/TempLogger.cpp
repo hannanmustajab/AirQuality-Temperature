@@ -37,6 +37,7 @@
 // v1.16 - Added LowPowerMode 
 // v1.17 - Moved to deviceOS@1.4.0 and implemented low power fixes 
 // v1.18 - Added some variables to EEPROM. 
+// v1.19 - Fixed some issues with the memory map
 
 void setup();
 void loop();
@@ -53,7 +54,7 @@ void transitionState(void);
 bool sendNow(String Command);
 bool senseNow(String Command);
 bool LowPowerMode(String Command);
-#line 35 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
+#line 36 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
 const char releaseNumber[6] = "1.17"; // Displays the release on the menu
 
 #include "DS18.h" // Include the OneWire library
@@ -117,11 +118,11 @@ byte currentMinutePeriod;                           // control timing when using
 // Define the memory map - note can be EEPROM or FRAM
 namespace MEM_MAP {                                 // Moved to namespace instead of #define to limit scope
   enum Addresses {
-    versionAddr           = 0x0,                    // Where we store the memory map version number - 8 Bits
-    alertCountAddr        = 0x1,                    // Where we store our current alert count - 8 Bits
-    currentCountsTimeAddr = 0x5,                    // Time of last report - 32 bits
-    sensorData1Object     = 0x6,                     // The first data object
-    resetCountAddr        = 0x2                    // This is where we keep track of how often the Argon was reset - 8 Bits
+    versionAddr           = 0x00,                    // Where we store the memory map version number - 8 Bits
+    alertCountAddr        = 0x01,                    // Where we store our current alert count - 8 Bits
+    resetCountAddr        = 0x02,                     // This is where we keep track of how often the Argon was reset - 8 Bits
+    currentCountsTimeAddr = 0x03,                    // Time of last report - 32 bits
+    sensorData1Object     = 0x07                     // The first data object - where we start writing data
    };
 };
 
@@ -141,7 +142,7 @@ sensor_data_struct sensor_data;
 
 void setup()
 {
- 
+ Serial.begin(9600);
   // This part receives Response using Particle.subscribe() and tells the response received from Ubidots.
   char responseTopic[125];
   String deviceID = System.deviceID();                                            // Multiple Particle devices share the same hook - keeps things straight
@@ -169,9 +170,9 @@ void setup()
 
   resetCount = EEPROM.read(MEM_MAP::resetCountAddr);                              // Retrive system recount data from FRAM
   
-  
-  
   getTemperature();
+  takeMeasurements();
+  
 
   stayAwake = stayAwakeLong;                                                      // Stay awake longer on startup - helps with recovery for deployed devices
   stayAWakeTimeStamp = millis();                                                  // Reset the timestamp here as the connection sequence could take a while
@@ -201,7 +202,10 @@ void loop()
     case MEASURING_STATE:                                                         // Measuring State.
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
       currentHourlyPeriod = Time.hour();
-      if (getMeasurements()) state = REPORTING_DETERMINATION;                     // Get the measurements and move to reporting determination
+      if (getMeasurements()) {
+        takeMeasurements();
+        state = REPORTING_DETERMINATION;                     // Get the measurements and move to reporting determination
+      }
       else  {
         resetStartTimeStamp = millis();
         state = ERROR_STATE;                                                      // If we fail to get the measurements we need - go to error state
@@ -244,6 +248,7 @@ void loop()
         sampleRate = normalSamplePeriodSeconds;                                   // Small but non-zero change - move to normal sampling
         break;  
       }
+
       else {                                                                      // Case 4 - No change in temp - go back to idle
         if (verboseMode) {
           waitUntil(PublishDelayFunction);
@@ -319,6 +324,7 @@ void loop()
 
 
 bool takeMeasurements() {
+  
   // Mocked up here for the call - need to replace with your real readings
   int reportCycle;                                                    // Where are we in the sense and report cycle
   currentCountTime = Time.now();
@@ -347,24 +353,29 @@ bool takeMeasurements() {
 
   // SoilMoisture Measurements here
   sensor_data.temperatureInC = temperatureInC;
+  Serial.println(temperatureInC);
+  Serial.println("TEMPERATURE IN C");
+
   snprintf(temperatureString,sizeof(temperatureString), "%4.1f %%", sensor_data.temperatureInC);
+  
+  Serial.println(sensor_data.temperatureInC);
+  Serial.println("Temperature from takeMeasurements Function");
 
 
   // Get battery voltage level
   sensor_data.batteryVoltage = analogRead(BATT) * 0.0011224;                   // Voltage level of battery
   snprintf(batteryString, sizeof(batteryString), "%4.1f %%", sensor_data.batteryVoltage);
+  
+
 
 
   // Indicate that this is a valid data array and store it
   sensor_data.validData = true;
   sensor_data.timeStamp = Time.now();
-  EEPROM.put(6 + 100*reportCycle,sensor_data);                              // Current object is 72 bytes long - leaving some room for expansion
+  EEPROM.put(7 + 100*reportCycle,sensor_data);                              // Current object is 72 bytes long - leaving some room for expansion
 
   return 1;                                                             // Done, measurements take and the data array is stored as an obeect in EEPROM                                         
 }
-
-
-
 
 
 // Function to create a delay in the publish time
@@ -452,12 +463,10 @@ bool SetVerboseMode(String command) {                                           
 
 void sendUBIDots()                                                                // Function that sends the JSON payload to Ubidots
 {
-
-  
   char data[512];
 
   for (int i = 0; i < 4; i++) {
-    sensor_data = EEPROM.get(6 + i*100,sensor_data);                  // This spacing of the objects - 100 - must match what we put in the takeMeasurements() function
+    sensor_data = EEPROM.get(7 + i*100,sensor_data);                  // This spacing of the objects - 100 - must match what we put in the takeMeasurements() function
     snprintf(data, sizeof(data), "{\"Temperature\":%3.1f, \"Battery\":%3.1f}", sensor_data.temperatureInC, sensor_data.batteryVoltage);
     Particle.publish("Air-Quality-Hook", data, PRIVATE);
     waitUntil(PublishDelayFunction);                                  // Space out the sends

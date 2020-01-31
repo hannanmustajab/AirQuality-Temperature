@@ -120,7 +120,7 @@ sensor_data_struct sensor_data;
 
 void setup()
 {
- 
+ Serial.begin(9600);
   // This part receives Response using Particle.subscribe() and tells the response received from Ubidots.
   char responseTopic[125];
   String deviceID = System.deviceID();                                            // Multiple Particle devices share the same hook - keeps things straight
@@ -148,9 +148,9 @@ void setup()
 
   resetCount = EEPROM.read(MEM_MAP::resetCountAddr);                              // Retrive system recount data from FRAM
   
-  
-  
   getTemperature();
+  takeMeasurements();
+  
 
   stayAwake = stayAwakeLong;                                                      // Stay awake longer on startup - helps with recovery for deployed devices
   stayAWakeTimeStamp = millis();                                                  // Reset the timestamp here as the connection sequence could take a while
@@ -180,7 +180,10 @@ void loop()
     case MEASURING_STATE:                                                         // Measuring State.
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
       currentHourlyPeriod = Time.hour();
-      if (getMeasurements()) state = REPORTING_DETERMINATION;                     // Get the measurements and move to reporting determination
+      if (getMeasurements()) {
+        takeMeasurements();
+        state = REPORTING_DETERMINATION;                     // Get the measurements and move to reporting determination
+      }
       else  {
         resetStartTimeStamp = millis();
         state = ERROR_STATE;                                                      // If we fail to get the measurements we need - go to error state
@@ -223,6 +226,7 @@ void loop()
         sampleRate = normalSamplePeriodSeconds;                                   // Small but non-zero change - move to normal sampling
         break;  
       }
+
       else {                                                                      // Case 4 - No change in temp - go back to idle
         if (verboseMode) {
           waitUntil(PublishDelayFunction);
@@ -298,6 +302,7 @@ void loop()
 
 
 bool takeMeasurements() {
+  
   // Mocked up here for the call - need to replace with your real readings
   int reportCycle;                                                    // Where are we in the sense and report cycle
   currentCountTime = Time.now();
@@ -326,12 +331,20 @@ bool takeMeasurements() {
 
   // SoilMoisture Measurements here
   sensor_data.temperatureInC = temperatureInC;
+  Serial.println(temperatureInC);
+  Serial.println("TEMPERATURE IN C");
+
   snprintf(temperatureString,sizeof(temperatureString), "%4.1f %%", sensor_data.temperatureInC);
+  
+  Serial.println(sensor_data.temperatureInC);
+  Serial.println("Temperature from takeMeasurements Function");
 
 
   // Get battery voltage level
   sensor_data.batteryVoltage = analogRead(BATT) * 0.0011224;                   // Voltage level of battery
   snprintf(batteryString, sizeof(batteryString), "%4.1f %%", sensor_data.batteryVoltage);
+  
+
 
 
   // Indicate that this is a valid data array and store it
