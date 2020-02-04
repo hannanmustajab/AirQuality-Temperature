@@ -32,8 +32,9 @@
 // v1.17 - Moved to deviceOS@1.4.0 and implemented low power fixes 
 // v1.18 - Added some variables to EEPROM. 
 // v1.19 - Fixed some issues with the memory map
+// v1.20 - Added a check for a non-zero temperature.
 
-const char releaseNumber[6] = "1.17"; // Displays the release on the menu
+const char releaseNumber[6] = "1.20"; // Displays the release on the menu
 
 #include "DS18.h" // Include the OneWire library
 
@@ -216,7 +217,7 @@ void loop()
         sampleRate = rapidSamplePeriodSeconds;                                    // Move to rapid sampling
         break;
       }
-      else if (temperatureInC != lastTemperatureInC) {                            // Case 3 - smal change in Temp - report and normal sampling
+      else if (temperatureInC != lastTemperatureInC) {                            // Case 3 - small change in Temp - report and normal sampling
         if (verboseMode) {
           waitUntil(PublishDelayFunction);
           Particle.publish("State", "Change detected - Reporting", PRIVATE);      // Report for diagnostics
@@ -325,11 +326,10 @@ bool takeMeasurements() {
       break;                                                          // just in case
   }
   
-
   // Only gets marked true if we get all the measurements
   sensor_data.validData = false;
 
-  // SoilMoisture Measurements here
+  // Temperature Measurements here
   sensor_data.temperatureInC = temperatureInC;
   Serial.println(temperatureInC);
   Serial.println("TEMPERATURE IN C");
@@ -339,14 +339,10 @@ bool takeMeasurements() {
   Serial.println(sensor_data.temperatureInC);
   Serial.println("Temperature from takeMeasurements Function");
 
-
   // Get battery voltage level
   sensor_data.batteryVoltage = analogRead(BATT) * 0.0011224;                   // Voltage level of battery
   snprintf(batteryString, sizeof(batteryString), "%4.1f %%", sensor_data.batteryVoltage);
   
-
-
-
   // Indicate that this is a valid data array and store it
   sensor_data.validData = true;
   sensor_data.timeStamp = Time.now();
@@ -393,7 +389,7 @@ bool getTemperature() {                                                         
   char data[32];
   for (int i=1; i <= 10; i++) {
     if (sensor.read()) {
-      temperatureInC = sensor.celsius();
+      if (temperatureInC != 0.0) temperatureInC = sensor.celsius();
       snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", temperatureInC);
       return 1;
     }
