@@ -2,8 +2,8 @@
 //       THIS IS A GENERATED FILE - DO NOT EDIT       //
 /******************************************************/
 
-#include "application.h"
-#line 1 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
+#include "Particle.h"
+#line 1 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
 /*
  * Project TempLogger
  * Description: Reading Temperature from OneWire 18B20 and sending it to particle cloud. 
@@ -55,14 +55,14 @@ void transitionState(void);
 bool sendNow(String Command);
 bool senseNow(String Command);
 bool LowPowerMode(String Command);
-#line 37 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
+#line 37 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
 const char releaseNumber[6] = "1.20"; // Displays the release on the menu
 
-#include "DS18.h" // Include the OneWire library
+#include "adafruit-sht31.h"           //Include SHT Library
 
 
 // Initialize modules here
-DS18 sensor(D3); // Initialize the temperature sensor object
+Adafruit_SHT31 sht31 = Adafruit_SHT31();    // Initialize sensor object
 
 // State Machine Variables
 enum State
@@ -178,7 +178,11 @@ void setup()
   stayAwake = stayAwakeLong;                                                      // Stay awake longer on startup - helps with recovery for deployed devices
   stayAWakeTimeStamp = millis();                                                  // Reset the timestamp here as the connection sequence could take a while
 
-
+  if (! sht31.begin(0x44)) {   // Set to 0x45 for alternate i2c addr
+    Serial.println("Couldn't find SHT31");
+    }
+  
+  
 
   state = IDLE_STATE;                                                             // If we made it this far, we are ready to go to IDLE in the main loop
   if (verboseMode && oldState != state) transitionState();                        // If verboseMode is on and state is changed, Then publish the state transition.
@@ -410,11 +414,11 @@ bool getMeasurements()
 bool getTemperature() {                                                           // Function to get temperature value from DS18B20.
   char data[32];
   for (int i=1; i <= 10; i++) {
-    if (sensor.read()) {
-      if (temperatureInC != 0.0) temperatureInC = sensor.celsius();
+    
+      if (temperatureInC != 0.0) temperatureInC = sht31.readTemperature();
       snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", temperatureInC);
-      return 1;
-    }
+   
+    
     Particle.process();                                                           // This could tie up the Argon making it unresponsive to Particle commands
     snprintf(data,sizeof(data),"Sensor Read Failed, attempt %i",i);
     waitUntil(PublishDelayFunction);                                              // Use this function to slow the reading of the sensor
