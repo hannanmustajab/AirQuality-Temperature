@@ -3,7 +3,7 @@
 /******************************************************/
 
 #include "Particle.h"
-#line 1 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
+#line 1 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
 /*
  * Project TempLogger
  * Description: Reading Temperature from OneWire 18B20 and sending it to particle cloud. 
@@ -39,6 +39,8 @@
 // v1.18 - Added some variables to EEPROM. 
 // v1.19 - Fixed some issues with the memory map
 // v1.20 - Added a check for a non-zero temperature.
+// v1.21 - Added Adafruit SHT31 library.
+// v1.22 - Updated to fix Sensing and reporting - cleaned up get and take measurement functions
 
 void setup();
 void loop();
@@ -46,8 +48,6 @@ bool takeMeasurements();
 bool PublishDelayFunction();
 void getSignalStrength();
 void getBatteryCharge();
-bool getMeasurements();
-bool getTemperature();
 bool SetVerboseMode(String command);
 void sendUBIDots();
 void UbidotsHandler(const char *event, const char *data);
@@ -55,11 +55,10 @@ void transitionState(void);
 bool sendNow(String Command);
 bool senseNow(String Command);
 bool LowPowerMode(String Command);
-#line 37 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
-const char releaseNumber[6] = "1.20"; // Displays the release on the menu
+#line 39 "/Users/chipmc/Documents/Maker/Particle/Projects/AirQuality-Temperature/src/TempLogger.ino"
+const char releaseNumber[6] = "1.22"; // Displays the release on the menu
 
-#include "adafruit-sht31.h"           //Include SHT Library
-
+#include "adafruit-sht31.h"           //Include SHT-31 Library
 
 // Initialize modules here
 Adafruit_SHT31 sht31 = Adafruit_SHT31();    // Initialize sensor object
@@ -133,6 +132,7 @@ struct sensor_data_struct {                         // Here we define the struct
   unsigned long timeStamp;
   float batteryVoltage;
   float temperatureInC;
+  float humidity;                                   // *** Added a humidity element to the structure
 };
 
 sensor_data_struct sensor_data;
@@ -171,17 +171,16 @@ void setup()
 
   resetCount = EEPROM.read(MEM_MAP::resetCountAddr);                              // Retrive system recount data from FRAM
   
-  getTemperature();
+  if (! sht31.begin(0x44)) {                                                      // *** This has to be above takemeasurements() Set to 0x45 for alternate i2c addr
+    Serial.println("Couldn't find SHT31");
+  }
+
   takeMeasurements();
   
-
   stayAwake = stayAwakeLong;                                                      // Stay awake longer on startup - helps with recovery for deployed devices
   stayAWakeTimeStamp = millis();                                                  // Reset the timestamp here as the connection sequence could take a while
 
-  if (! sht31.begin(0x44)) {   // Set to 0x45 for alternate i2c addr
-    Serial.println("Couldn't find SHT31");
-    }
-  
+
   
 
   state = IDLE_STATE;                                                             // If we made it this far, we are ready to go to IDLE in the main loop
@@ -207,10 +206,7 @@ void loop()
     case MEASURING_STATE:                                                         // Measuring State.
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
       currentHourlyPeriod = Time.hour();
-      if (getMeasurements()) {
-        takeMeasurements();
-        state = REPORTING_DETERMINATION;                     // Get the measurements and move to reporting determination
-      }
+      if(takeMeasurements()) state = REPORTING_DETERMINATION;                     // Get the measurements and move to reporting determination
       else  {
         resetStartTimeStamp = millis();
         state = ERROR_STATE;                                                      // If we fail to get the measurements we need - go to error state
@@ -329,7 +325,6 @@ void loop()
 
 
 bool takeMeasurements() {
-  
   // Mocked up here for the call - need to replace with your real readings
   int reportCycle;                                                    // Where are we in the sense and report cycle
   currentCountTime = Time.now();
@@ -356,18 +351,21 @@ bool takeMeasurements() {
   sensor_data.validData = false;
 
   // Temperature Measurements here
-  sensor_data.temperatureInC = temperatureInC;
+  sensor_data.temperatureInC = sht31.readTemperature();               // **** Have to use the SHT31 function to get this reading
   Serial.println(temperatureInC);
   Serial.println("TEMPERATURE IN C");
 
-  snprintf(temperatureString,sizeof(temperatureString), "%4.1f %%", sensor_data.temperatureInC);
+  snprintf(temperatureString,sizeof(temperatureString), "%4.1fC", sensor_data.temperatureInC);  // *** C not %
+
+  //******  Need to add the humidity sensing here.
   
   Serial.println(sensor_data.temperatureInC);
   Serial.println("Temperature from takeMeasurements Function");
 
+
   // Get battery voltage level
   sensor_data.batteryVoltage = analogRead(BATT) * 0.0011224;                   // Voltage level of battery
-  snprintf(batteryString, sizeof(batteryString), "%4.1f %%", sensor_data.batteryVoltage);
+  snprintf(batteryString, sizeof(batteryString), "%4.1fV", sensor_data.batteryVoltage);  // *** Volts not percent
   
   // Indicate that this is a valid data array and store it
   sensor_data.validData = true;
@@ -402,31 +400,6 @@ void getBatteryCharge()
   voltage = analogRead(BATT) * 0.0011224;
   snprintf(batteryString, sizeof(batteryString), "%3.1f V", voltage);
 }
-
-bool getMeasurements()
-{
-  getSignalStrength();                                                            // Get Signal Strength
-  getBatteryCharge();                                                             // Get Battery Charge Percentage
-  if (getTemperature()) return 1;                                                 // Read Temperature from Sensor
-  else return 0;                                                                  // Less than 1 degree difference detected
-}
-
-bool getTemperature() {                                                           // Function to get temperature value from DS18B20.
-  char data[32];
-  for (int i=1; i <= 10; i++) {
-    
-      if (temperatureInC != 0.0) temperatureInC = sht31.readTemperature();
-      snprintf(temperatureString, sizeof(temperatureString), "%3.1f Degrees C", temperatureInC);
-   
-    
-    Particle.process();                                                           // This could tie up the Argon making it unresponsive to Particle commands
-    snprintf(data,sizeof(data),"Sensor Read Failed, attempt %i",i);
-    waitUntil(PublishDelayFunction);                                              // Use this function to slow the reading of the sensor
-    if (verboseMode) Particle.publish("Sensing",data,PRIVATE);                    // Send messages so we can see if sensor is mesbehaving
-  }
-  return 0;
-}
-
 
 bool SetVerboseMode(String command) {                                             // Function to Toggle VerboseMode.
   if (command == "1" && verboseMode == false)
