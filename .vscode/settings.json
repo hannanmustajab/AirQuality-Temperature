@@ -6,7 +6,7 @@
     "particle.firmwareVersion": "1.4.0",
     "particle.targetPlatform": "argon",
     "cortex-debug.openocdPath": "${command:particle.getDebuggerOpenocdPath}",
-    "particle.targetDevice": "Argon-Dev",
+    "particle.targetDevice": "hannan-argon",
     "C_Cpp.errorSquiggles": "Disabled",
     "C_Cpp.formatting": "Disabled",
     "C_Cpp.clang_format_sortIncludes": false,

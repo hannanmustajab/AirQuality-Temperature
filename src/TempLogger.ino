@@ -34,7 +34,9 @@
 // v1.19 - Fixed some issues with the memory map
 // v1.20 - Added a check for a non-zero temperature.
 // v1.21 - Added Adafruit SHT31 library.
-// v1.22 - Updated to fix Sensing and reporting - cleaned up get and take measurement functions - 
+// v1.22 - Updated to fix Sensing and reporting - cleaned up get and take measurement functions.
+// v1.23 - Fixed the reporting determination state, sendUbidots function , Added humidity reading and added lowPowerMode to EEPROM. 
+
 
 /*
 Things to do:
@@ -43,7 +45,7 @@ Make LowPowerModeOn persistent by storing the state in EEPROM
 */
 
 
-const char releaseNumber[6] = "1.22"; // Displays the release on the menu
+const char releaseNumber[6] = "1.23"; // Displays the release on the menu
 
 #include "adafruit-sht31.h"           //Include SHT-31 Library
 
@@ -70,7 +72,8 @@ State oldState = INITIALIZATION_STATE;                                          
 // Variables Related To Particle Mobile Application Reporting
 char signalString[16];                                                            // Used to communicate Wireless RSSI and Description
 char temperatureString[16];                                                       // Temperature string for Reporting
-char batteryString[16];                                                           // Battery value for reporting
+char batteryString[16];                                                           // Battery value for reporting.
+char humidityString[16];                                                          // Humidity String for reporting.
 
 // Constants that will influence the timing of the Program - collected here to make it easier to edit them
 const unsigned long webhookTimeout = 45000;                                       // Timeperiod to wait for a response from Ubidots before going to error State.
@@ -96,6 +99,7 @@ int resetCount;                                                                 
 bool verboseMode = false;                                                         // Variable VerboseMode.
 float temperatureInC = 0;                                                         // Current Temp Reading global variable
 float voltage;                                                                    // Voltage level of the LiPo battery - 3.6-4.2V range
+float humidityInPercent=0;                                                        // Humidity level from the sensor. 
 
 // Time Period and reporting Related Variables
 time_t currentCountTime;                            // Global time vairable
@@ -103,13 +107,16 @@ byte currentMinutePeriod;                           // control timing when using
 
 
 // Define the memory map - note can be EEPROM or FRAM
-namespace MEM_MAP {                                 // Moved to namespace instead of #define to limit scope
+namespace MEM_MAP {                                  // Moved to namespace instead of #define to limit scope
   enum Addresses {
     versionAddr           = 0x00,                    // Where we store the memory map version number - 8 Bits
     alertCountAddr        = 0x01,                    // Where we store our current alert count - 8 Bits
-    resetCountAddr        = 0x02,                     // This is where we keep track of how often the Argon was reset - 8 Bits
+    resetCountAddr        = 0x02,                    // This is where we keep track of how often the Argon was reset - 8 Bits
     currentCountsTimeAddr = 0x03,                    // Time of last report - 32 bits
-    sensorData1Object     = 0x07                     // The first data object - where we start writing data
+    LowPowerModeOn        = 0x04                     // Low power mode status
+    sensorData1Object     = 0x08                     // The first data object - where we start writing data
+
+
    };
 };
 
@@ -131,6 +138,7 @@ sensor_data_struct sensor_data;
 void setup()
 {
  Serial.begin(9600);
+  
   // This part receives Response using Particle.subscribe() and tells the response received from Ubidots.
   char responseTopic[125];
   String deviceID = System.deviceID();                                            // Multiple Particle devices share the same hook - keeps things straight
@@ -144,6 +152,7 @@ void setup()
   Particle.function("Low-Power-Mode", LowPowerMode);                              // This function will send the device to low power mode or napping.  
   
   // Particle Variables
+  Particle.variable("Humidity",humidityString);                                   // Check the humidity from particle console. 
   Particle.variable("Temperature", temperatureString);                            // Setup Particle Variable
   Particle.variable("Release", releaseNumber);                                    // So we can see what release is running from the console
   Particle.variable("Signal", signalString);                                      // Particle variables that enable monitoring using the mobile app
@@ -202,6 +211,8 @@ void loop()
 
     case REPORTING_DETERMINATION:                                                 // Reporting determination state.
     {
+      Serial.println("Reporting Determination");
+      Serial.println(temperatureInC);
       if (verboseMode && oldState != state) transitionState();                    // If verboseMode is on and state is changed, Then publish the state transition.
        static float lastTemperatureInC = 0;
 
@@ -308,7 +319,6 @@ void loop()
 
 
 bool takeMeasurements() {
-  // Mocked up here for the call - need to replace with your real readings
   int reportCycle;                                                    // Where are we in the sense and report cycle
   currentCountTime = Time.now();
   int currentMinutes = Time.minute();                                // So we only have to check once
@@ -335,15 +345,18 @@ bool takeMeasurements() {
 
   // Temperature Measurements here
   sensor_data.temperatureInC = sht31.readTemperature();               // **** Have to use the SHT31 function to get this reading
-  Serial.println(temperatureInC);
-  Serial.println("TEMPERATURE IN C");
-
+  temperatureInC = sht31.readTemperature(); 
+  
   snprintf(temperatureString,sizeof(temperatureString), "%4.1fC", sensor_data.temperatureInC);  // *** C not %
 
-  //******  Need to add the humidity sensing here.
+  // Humidity Measurements here
+
+  sensor_data.humidity = sht31.readHumidity();                        //  Read and save the humidity levels
+  humidityInPercent = sht31.readHumidity();
+
+  snprintf(humidityString,sizeof(humidityString),"%4.1f",sensor_data.humidity);
+
   
-  Serial.println(sensor_data.temperatureInC);
-  Serial.println("Temperature from takeMeasurements Function");
 
 
   // Get battery voltage level
@@ -353,7 +366,7 @@ bool takeMeasurements() {
   // Indicate that this is a valid data array and store it
   sensor_data.validData = true;
   sensor_data.timeStamp = Time.now();
-  EEPROM.put(7 + 100*reportCycle,sensor_data);                              // Current object is 72 bytes long - leaving some room for expansion
+  EEPROM.put(8 + 100*reportCycle,sensor_data);                              // Current object is 72 bytes long - leaving some room for expansion
 
   return 1;                                                             // Done, measurements take and the data array is stored as an obeect in EEPROM                                         
 }
@@ -419,14 +432,19 @@ bool SetVerboseMode(String command) {                                           
 
 void sendUBIDots()                                                                // Function that sends the JSON payload to Ubidots
 {
+  Serial.println("sendUbiDots function called...");
   char data[512];
+  Particle.publish("Air-Quality-Hook", "Entered Send UbiDots function", PRIVATE);
+
 
   for (int i = 0; i < 4; i++) {
-    sensor_data = EEPROM.get(7 + i*100,sensor_data);                  // This spacing of the objects - 100 - must match what we put in the takeMeasurements() function
-    snprintf(data, sizeof(data), "{\"Temperature\":%3.1f, \"Battery\":%3.1f}", sensor_data.temperatureInC, sensor_data.batteryVoltage);
-    Particle.publish("Air-Quality-Hook", data, PRIVATE);
-    waitUntil(PublishDelayFunction);                                  // Space out the sends
+    sensor_data = EEPROM.get(8 + i*100,sensor_data);                  // This spacing of the objects - 100 - must match what we put in the takeMeasurements() function
   }
+  
+  snprintf(data, sizeof(data), "{\"Temperature\":%3.1f, \"Battery\":%3.1f, \"Humidity\":%3.1f}", sensor_data.temperatureInC, sensor_data.batteryVoltage, sensor_data.humidity);
+  Particle.publish("Air-Quality-Hook", data, PRIVATE);
+  waitUntil(PublishDelayFunction);                                  // Space out the sends
+  Serial.println(data);
   currentCountTime = Time.now();
   EEPROM.write(MEM_MAP::currentCountsTimeAddr, currentCountTime);
   webhookTimeStamp = millis();
@@ -494,6 +512,7 @@ bool senseNow(String Command)                                                   
   }
   else if (Command == "0") {                                                      // No action required
     return 1;
+
   }
   return 0;
 }
@@ -503,12 +522,14 @@ bool LowPowerMode(String Command)
   if (Command == "1")
   {
     lowPowerModeOn = true;                                                         // This sets the lowPowerModeOn to true 
+    EEPROM.write(MEM_MAP::LowPowerModeOn, lowPowerModeOn);
     return 1;
   }
   else if (Command == "0")
   {
     lowPowerModeOn = false;
+    EEPROM.write(MEM_MAP::LowPowerModeOn, lowPowerModeOn);
     return 1;
   }
   else return 0;
-}
+} 
