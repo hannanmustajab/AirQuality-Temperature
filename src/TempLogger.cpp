@@ -40,7 +40,8 @@
 // v1.19 - Fixed some issues with the memory map
 // v1.20 - Added a check for a non-zero temperature.
 // v1.21 - Added Adafruit SHT31 library.
-// v1.22 - Updated to fix Sensing and reporting - cleaned up get and take measurement functions - 
+// v1.22 - Updated to fix Sensing and reporting - cleaned up get and take measurement functions.
+// v1.23 - Fixed the reporting determination state, sendUbidots function , Added humidity reading and added lowPowerMode to EEPROM. 
 
 
 /*
@@ -63,10 +64,14 @@ void transitionState(void);
 bool sendNow(String Command);
 bool senseNow(String Command);
 bool LowPowerMode(String Command);
-#line 47 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
-const char releaseNumber[6] = "1.22"; // Displays the release on the menu
+#line 48 "/Users/abdulhannanmustajab/Desktop/Projects/IoT/Particle/tempLogger/TempLogger/src/TempLogger.ino"
+const char releaseNumber[6] = "1.23"; // Displays the release on the menu
 
 #include "adafruit-sht31.h"           //Include SHT-31 Library
+
+// PM 2.5 Sensor
+#include <Seeed_HM330X.h>
+
 
 // Initialize modules here
 Adafruit_SHT31 sht31 = Adafruit_SHT31();    // Initialize sensor object
@@ -93,6 +98,10 @@ char signalString[16];                                                          
 char temperatureString[16];                                                       // Temperature string for Reporting
 char batteryString[16];                                                           // Battery value for reporting.
 char humidityString[16];                                                          // Humidity String for reporting.
+char pm_1_0_String[16];                                                           // PM 1.0 String for reporting. 
+char pm_2_5_String[16];                                                           // PM 2.5 String for reporting. 
+char pm_10_String[16];                                                            // PM 10 String for reporting. 
+
 
 // Constants that will influence the timing of the Program - collected here to make it easier to edit them
 const unsigned long webhookTimeout = 45000;                                       // Timeperiod to wait for a response from Ubidots before going to error State.
@@ -124,17 +133,34 @@ float humidityInPercent=0;                                                      
 time_t currentCountTime;                            // Global time vairable
 byte currentMinutePeriod;                           // control timing when using 5-min samp intervals
 
+//  PM 2.5 Related Variables
+const byte SensorPayloadLength = 28;
+const byte SensorPayloadBufferSize = 29;
+const byte SensorPayloadPM1_0Position = 4;
+const byte SensorPayloadPM2_5Position = 6;
+const byte SensorPayloadPM10_0Position = 8;
+
+byte sum = 0;
+short pm1_0;
+short pm2_5;
+short pm10_0;
+
+byte SensorPayload[SensorPayloadBufferSize];
+
+//  Initialise the sensor object 
+
+HM330X sensor;
+
 
 // Define the memory map - note can be EEPROM or FRAM
-namespace MEM_MAP {                                 // Moved to namespace instead of #define to limit scope
+namespace MEM_MAP {                                  // Moved to namespace instead of #define to limit scope
   enum Addresses {
     versionAddr           = 0x00,                    // Where we store the memory map version number - 8 Bits
     alertCountAddr        = 0x01,                    // Where we store our current alert count - 8 Bits
-    resetCountAddr        = 0x02,                     // This is where we keep track of how often the Argon was reset - 8 Bits
+    resetCountAddr        = 0x02,                    // This is where we keep track of how often the Argon was reset - 8 Bits
     currentCountsTimeAddr = 0x03,                    // Time of last report - 32 bits
+    LowPowerModeOn        = 0x04,                    // Low power mode status
     sensorData1Object     = 0x08                     // The first data object - where we start writing data
-
-
    };
 };
 
@@ -145,6 +171,9 @@ struct sensor_data_struct {                         // Here we define the struct
   float batteryVoltage;
   float temperatureInC;
   float humidity;                                   // *** Added a humidity element to the structure
+  float pm1_0;
+  float pm2_5;
+  float pm10_0;
 };
 
 sensor_data_struct sensor_data;
@@ -175,6 +204,9 @@ void setup()
   Particle.variable("Release", releaseNumber);                                    // So we can see what release is running from the console
   Particle.variable("Signal", signalString);                                      // Particle variables that enable monitoring using the mobile app
   Particle.variable("Battery", batteryString);                                    // Battery level in V as the Argon does not have a fuel cell
+  Particle.variable("PM1.0",pm_1_0_String);
+  Particle.variable("PM2.5",pm_2_5_String);
+  Particle.variable("PM10",pm_10_String);
 
   if (MEMORYMAPVERSION != EEPROM.read(MEM_MAP::versionAddr)) {                    // Check to see if the memory map is the right version
       EEPROM.put(MEM_MAP::versionAddr,MEMORYMAPVERSION);
@@ -183,10 +215,16 @@ void setup()
     }
   }
 
-  resetCount = EEPROM.read(MEM_MAP::resetCountAddr);                              // Retrive system recount data from FRAM
+  resetCount = EEPROM.read(MEM_MAP::resetCountAddr);                              // Retrive system recount data from EEPROM
   
   if (! sht31.begin(0x44)) {                                                      // *** This has to be above takemeasurements() Set to 0x45 for alternate i2c addr
     Serial.println("Couldn't find SHT31");
+  }
+
+  if (sensor.init())
+  {
+    Serial.println("HM3301 init failed");
+    while (true);
   }
 
   takeMeasurements();
@@ -375,12 +413,37 @@ bool takeMeasurements() {
   snprintf(humidityString,sizeof(humidityString),"%4.1f",sensor_data.humidity);
 
   
-
-
   // Get battery voltage level
   sensor_data.batteryVoltage = analogRead(BATT) * 0.0011224;                   // Voltage level of battery
   snprintf(batteryString, sizeof(batteryString), "%4.1fV", sensor_data.batteryVoltage);  // *** Volts not percent
   
+  //  Get PM 2.5 Sensor Data
+  if(sensor.read_sensor_value(SensorPayload,SensorPayloadBufferSize) == NO_ERROR){
+     for(int i=0;i<SensorPayloadLength;i++)
+    {
+        sum+=SensorPayload[i];
+    }
+  }
+  // Add PM1.0 to object
+  pm1_0 = SensorPayload[SensorPayloadPM1_0Position]<<8|SensorPayload[SensorPayloadPM1_0Position+1];
+  sensor_data.pm1_0 = pm1_0;
+  snprintf(pm_1_0_String, sizeof(pm_1_0_String), "%4.1fug/m3", sensor_data.pm1_0);  // *** Volts not percent
+  
+  
+  //  Add PM2.5 to object.
+  pm2_5 = SensorPayload[SensorPayloadPM2_5Position]<<8|SensorPayload[SensorPayloadPM2_5Position+1];
+  sensor_data.pm2_5 = pm2_5;
+  snprintf(pm_2_5_String, sizeof(pm_2_5_String), "%4.1fug/m3", sensor_data.pm2_5);  // *** Volts not percent
+
+    
+  //  Add PM10 to the object
+  pm10_0 = SensorPayload[SensorPayloadPM10_0Position]<<8|SensorPayload[SensorPayloadPM10_0Position+1];
+  sensor_data.pm10_0 = pm10_0;
+  snprintf(pm_10_String, sizeof(pm_10_String), "%4.1fug/m3", sensor_data.pm10_0);  // *** Volts not percent
+
+    
+
+
   // Indicate that this is a valid data array and store it
   sensor_data.validData = true;
   sensor_data.timeStamp = Time.now();
@@ -452,15 +515,15 @@ void sendUBIDots()                                                              
 {
   Serial.println("sendUbiDots function called...");
   char data[512];
-  Particle.publish("Air-Quality-Hook", "Entered Send UbiDots function", PRIVATE);
 
 
   for (int i = 0; i < 4; i++) {
     sensor_data = EEPROM.get(8 + i*100,sensor_data);                  // This spacing of the objects - 100 - must match what we put in the takeMeasurements() function
   }
   
-  snprintf(data, sizeof(data), "{\"Temperature\":%3.1f, \"Battery\":%3.1f, \"Humidity\":%3.1f}", sensor_data.temperatureInC, sensor_data.batteryVoltage, sensor_data.humidity);
+  snprintf(data, sizeof(data), "{\"Temperature\":%3.1f, \"Battery\":%3.1f, \"Humidity\":%3.1f, \"PM2.5\":%3.1f}", sensor_data.temperatureInC, sensor_data.batteryVoltage, sensor_data.humidity, sensor_data.pm1_0);
   Particle.publish("Air-Quality-Hook", data, PRIVATE);
+  Particle.publish("elastic-webhook", data, PRIVATE);
   waitUntil(PublishDelayFunction);                                  // Space out the sends
   Serial.println(data);
   currentCountTime = Time.now();
@@ -530,6 +593,7 @@ bool senseNow(String Command)                                                   
   }
   else if (Command == "0") {                                                      // No action required
     return 1;
+
   }
   return 0;
 }
@@ -539,12 +603,14 @@ bool LowPowerMode(String Command)
   if (Command == "1")
   {
     lowPowerModeOn = true;                                                         // This sets the lowPowerModeOn to true 
+    EEPROM.write(MEM_MAP::LowPowerModeOn, lowPowerModeOn);
     return 1;
   }
   else if (Command == "0")
   {
     lowPowerModeOn = false;
+    EEPROM.write(MEM_MAP::LowPowerModeOn, lowPowerModeOn);
     return 1;
   }
   else return 0;
-}
+} 
